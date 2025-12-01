@@ -6,28 +6,21 @@ Modern storefront modeled after rushordertees.com for a full-service custom prin
 
 - **Framework**: Next.js 16 (App Router) + React 19 + Server Components
 - **Styling**: Tailwind CSS v4 (inline `@theme`) with glassmorphism-inspired UI kit
-- **Database**: Prisma ORM targeting PostgreSQL (Neon, Supabase, RDS, etc.)
+- **Database**: Neon serverless PostgreSQL with Prisma ORM
 - **Validation**: Zod 4 for type-safe form validation
 - **State**: TanStack React Query for interactive quote forms
 - **Testing**: Vitest + React Testing Library
 - **API**: RESTful routes for products, services, suppliers, quotes, and settings
+- **Deployment**: Docker + Caddy with automatic Let's Encrypt SSL
 
-## Getting Started
+## Quick Start
 
-### Prerequisites
-
-- Node.js 18+
-- npm or yarn
-- PostgreSQL database (optional - app works without it)
-
-### Installation
+### Option 1: Without Database (Fastest)
 
 ```bash
-# Navigate to web directory
-cd web
-
-# Copy environment template
-cp .env.example .env.local
+# Clone the repository
+git clone https://github.com/djkiraly/logoz.git
+cd logoz
 
 # Install dependencies
 npm install
@@ -35,15 +28,13 @@ npm install
 # Generate Prisma client
 npm run db:generate
 
-# Start development server (works without database)
+# Start development server
 npm run dev
 ```
 
-The site will be available at `http://localhost:3000`.
+The site will be available at `http://localhost:3000` with static sample data.
 
-### With Neon Database (Recommended)
-
-This project is optimized for [Neon](https://neon.tech) serverless PostgreSQL:
+### Option 2: With Neon Database (Recommended)
 
 1. **Create a Neon account** at [neon.tech](https://neon.tech) (free tier available)
 
@@ -51,46 +42,60 @@ This project is optimized for [Neon](https://neon.tech) serverless PostgreSQL:
 
 3. **Get your connection strings** from the Neon dashboard:
    - Click "Connection Details" in your project
-   - Copy the connection string (it looks like `postgresql://user:pass@ep-xxx.region.aws.neon.tech/neondb`)
+   - Copy both the **pooled** and **direct** connection strings
 
-4. **Configure environment variables** in `.env.local`:
+4. **Configure environment**:
    ```bash
-   # Pooled connection for app queries
-   DATABASE_URL="postgresql://user:pass@ep-xxx.region.aws.neon.tech/neondb?sslmode=require"
-
-   # Direct connection for migrations
-   DIRECT_URL="postgresql://user:pass@ep-xxx.region.aws.neon.tech/neondb?sslmode=require"
-
-   # Shadow database (create a branch named "shadow" in Neon)
-   SHADOW_DATABASE_URL="postgresql://user:pass@ep-xxx.region.aws.neon.tech/neondb_shadow?sslmode=require"
+   # Copy template and create both files (Prisma needs .env)
+   cp .env.example .env.local
+   cp .env.example .env
    ```
 
-5. **Run migrations and seed**:
+5. **Edit `.env` and `.env.local`** with your Neon credentials:
    ```bash
-   # Create database tables
-   npm run db:migrate:dev -- --name init
+   # Pooled connection (keep -pooler in hostname)
+   DATABASE_URL="postgresql://user:pass@ep-xxx-pooler.region.aws.neon.tech/neondb?sslmode=require"
 
-   # Seed with sample data (optional)
+   # Direct connection (remove -pooler from hostname for migrations)
+   DIRECT_URL="postgresql://user:pass@ep-xxx.region.aws.neon.tech/neondb?sslmode=require"
+   ```
+
+   > **Important:** The `DIRECT_URL` must NOT have `-pooler` in the hostname. This is required for Prisma migrations to work correctly.
+
+6. **Install, migrate, and seed**:
+   ```bash
+   # Install dependencies
+   npm install
+
+   # Push schema to database (first time setup)
+   npx prisma db push
+
+   # Seed with sample data
    npm run db:seed
 
    # Start development server
    npm run dev
    ```
 
+7. **View your data** (optional):
+   ```bash
+   npm run db:studio
+   ```
+
 **Neon Features Used:**
 - Serverless driver with WebSocket connections
 - Connection pooling for efficient serverless deployments
-- Branching for shadow database migrations
+- Instant database provisioning
 
 ## Environment Variables
 
-Copy `.env.example` to `.env.local` and configure:
+Copy `.env.example` to both `.env.local` (for Next.js) and `.env` (for Prisma CLI):
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `DATABASE_URL` | For DB features | Neon PostgreSQL connection string (pooled) |
-| `DIRECT_URL` | For migrations | Direct connection bypassing pooler |
-| `SHADOW_DATABASE_URL` | For migrations | Shadow database for Prisma migrate |
+| `DATABASE_URL` | For DB features | Neon PostgreSQL connection string (with `-pooler`) |
+| `DIRECT_URL` | For DB features | Neon direct connection (without `-pooler`) |
+| `PORT` | No | Server port (default: 3000, production: 80) |
 | `NEXT_PUBLIC_SITE_NAME` | No | Overrides the storefront title |
 | `ADMIN_CONTACT_EMAIL` | No | Admin email for quote notifications |
 | `NEXT_PUBLIC_SITE_URL` | No | Public URL (for CORS in production) |
@@ -106,7 +111,8 @@ When no database is configured, the UI serves curated static data. Once a databa
 | --- | --- |
 | `npm run dev` | Start Next.js in development mode |
 | `npm run build` | Create production build |
-| `npm run start` | Run the production build |
+| `npm run start` | Run production build (port 3000) |
+| `npm run start:production` | Run production build (port 80) |
 | `npm run lint` | Run ESLint |
 
 ### Testing
@@ -132,7 +138,7 @@ When no database is configured, the UI serves curated static data. Once a databa
 ## Project Structure
 
 ```
-web/
+logoz/
 ├── src/
 │   ├── app/                # Next.js App Router pages & API routes
 │   │   ├── api/            # REST API endpoints
@@ -148,7 +154,7 @@ web/
 │   ├── lib/                # Utilities & data layer
 │   │   ├── api-utils.ts    # API helpers
 │   │   ├── logger.ts       # Structured logging
-│   │   ├── prisma.ts       # Database client
+│   │   ├── prisma.ts       # Neon database client
 │   │   ├── rate-limit.ts   # Rate limiting
 │   │   ├── site-data.ts    # Data fetching with fallback
 │   │   └── validation.ts   # Zod schemas
@@ -156,6 +162,12 @@ web/
 ├── prisma/
 │   ├── schema.prisma       # Database schema
 │   └── seed.ts             # Seed script
+├── deploy/                 # Deployment configurations
+│   ├── Caddyfile           # Caddy reverse proxy config
+│   ├── nginx.conf          # nginx config for certbot
+│   └── setup-ssl.sh        # SSL setup helper script
+├── Dockerfile              # Container build
+├── docker-compose.yml      # Full stack deployment
 └── public/                 # Static assets
 ```
 
