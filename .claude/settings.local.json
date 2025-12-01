@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm outdated:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run test:run:*)",
+      "Bash(npm run lint)",
+      "Bash(npm run build)",
+      "Bash(npm run db:migrate:deploy:*)",
+      "Bash(copy .env.local .env)",
+      "Bash(npx prisma db push:*)",
+      "Bash(npm run db:seed:*)",
+      "Bash(npx prisma studio)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
