@@ -10,7 +10,14 @@
       "Bash(copy .env.local .env)",
       "Bash(npx prisma db push:*)",
       "Bash(npm run db:seed:*)",
-      "Bash(npx prisma studio)"
+      "Bash(npx prisma studio)",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nAdd Neon database integration and full-stack print shop storefront\n\n- Configure Neon serverless PostgreSQL with connection pooling\n- Add Prisma ORM with complete database schema\n- Implement API routes for products, services, suppliers, quotes\n- Add rate limiting and input validation\n- Create responsive glassmorphism UI components\n- Add comprehensive test suite (59 tests)\n- Include AGENTS.md for AI assistant guidelines\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git remote:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []
