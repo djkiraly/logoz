@@ -196,26 +196,45 @@ The project is optimized for Vercel with Neon PostgreSQL:
 
 Migrations run automatically via the build process. Neon's serverless driver ensures efficient connection handling on Vercel's edge network.
 
-### Other Platforms
+### Other Platforms (VPS, EC2, DigitalOcean, etc.)
 
-For other Node.js hosts:
+For deployment on a remote server running on port 80:
 
 ```bash
-# Build
+# Build the application
 npm run build
 
 # Run migrations (if using database)
 npm run db:migrate:deploy
 
-# Start server
-npm run start
+# Start server on port 80 (requires sudo on Linux)
+sudo npm run start:production
 ```
 
-Use a process manager like PM2 for production:
+Or use the `PORT` environment variable:
 
 ```bash
-pm2 start npm --name "logoz" -- start
+PORT=80 npm run start
 ```
+
+**Using PM2 (recommended for production):**
+
+```bash
+# Install PM2 globally
+npm install -g pm2
+
+# Start on port 80
+sudo pm2 start npm --name "logoz" -- run start:production
+
+# Or with environment variable
+sudo PORT=80 pm2 start npm --name "logoz" -- start
+
+# Save PM2 process list and set up startup script
+pm2 save
+sudo pm2 startup
+```
+
+**Note:** Port 80 requires root/admin privileges on most systems. Alternatively, use a reverse proxy (nginx, Caddy) to forward port 80 to port 3000.
 
 ## Testing
 
