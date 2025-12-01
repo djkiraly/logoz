@@ -234,7 +234,74 @@ pm2 save
 sudo pm2 startup
 ```
 
-**Note:** Port 80 requires root/admin privileges on most systems. Alternatively, use a reverse proxy (nginx, Caddy) to forward port 80 to port 3000.
+**Note:** Port 80 requires root/admin privileges on most systems. For HTTPS, use one of the methods below.
+
+### HTTPS with Let's Encrypt
+
+#### Option 1: Docker Compose with Caddy (Easiest)
+
+This method automatically handles SSL certificates:
+
+```bash
+# 1. Edit deploy/Caddyfile - replace "yourdomain.com" with your domain
+nano deploy/Caddyfile
+
+# 2. Configure environment
+cp .env.example .env
+nano .env  # Add your Neon database credentials
+
+# 3. Start everything
+docker-compose up -d
+```
+
+Caddy will automatically obtain and renew Let's Encrypt certificates.
+
+#### Option 2: Caddy (without Docker)
+
+```bash
+# 1. Install Caddy
+# Debian/Ubuntu:
+sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt update && sudo apt install caddy
+
+# 2. Edit Caddyfile with your domain
+sed -i 's/yourdomain.com/your-actual-domain.com/g' deploy/Caddyfile
+
+# 3. Copy config and start
+sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
+sudo systemctl restart caddy
+
+# 4. Start Next.js app
+pm2 start npm --name "logoz" -- start
+```
+
+#### Option 3: nginx + certbot
+
+```bash
+# 1. Install nginx and certbot
+sudo apt install -y nginx certbot python3-certbot-nginx
+
+# 2. Edit nginx config with your domain
+sed -i 's/yourdomain.com/your-actual-domain.com/g' deploy/nginx.conf
+
+# 3. Copy config
+sudo cp deploy/nginx.conf /etc/nginx/sites-available/logoz
+sudo ln -s /etc/nginx/sites-available/logoz /etc/nginx/sites-enabled/
+sudo rm /etc/nginx/sites-enabled/default
+
+# 4. Start nginx
+sudo systemctl restart nginx
+
+# 5. Obtain SSL certificate
+sudo certbot --nginx -d your-actual-domain.com -d www.your-actual-domain.com
+
+# 6. Start Next.js app
+pm2 start npm --name "logoz" -- start
+```
+
+Certbot will automatically set up certificate renewal.
 
 ## Testing
 

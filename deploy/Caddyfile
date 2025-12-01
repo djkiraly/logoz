@@ -1,0 +1,50 @@
+# Caddyfile for Logoz Cloud Print Studio
+# Caddy automatically handles Let's Encrypt SSL certificates
+#
+# Usage:
+#   1. Replace "yourdomain.com" with your actual domain
+#   2. Ensure DNS A record points to your server IP
+#   3. Run: docker-compose up -d (recommended)
+#      Or: caddy run --config /path/to/Caddyfile
+#
+# Caddy will automatically:
+#   - Obtain SSL certificate from Let's Encrypt
+#   - Renew certificates before expiry
+#   - Redirect HTTP to HTTPS
+#   - Enable HTTP/2 and HTTP/3
+
+yourdomain.com {
+    # Reverse proxy to Next.js app
+    # Use "app:3000" for Docker Compose, "localhost:3000" for standalone
+    reverse_proxy app:3000
+
+    # Enable compression
+    encode gzip zstd
+
+    # Security headers
+    header {
+        # Enable HSTS
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        # Prevent clickjacking
+        X-Frame-Options "SAMEORIGIN"
+        # Prevent MIME type sniffing
+        X-Content-Type-Options "nosniff"
+        # XSS protection
+        X-XSS-Protection "1; mode=block"
+        # Referrer policy
+        Referrer-Policy "strict-origin-when-cross-origin"
+        # Remove server header
+        -Server
+    }
+
+    # Logging
+    log {
+        output file /var/log/caddy/logoz-access.log
+        format json
+    }
+}
+
+# Optional: www redirect to non-www
+www.yourdomain.com {
+    redir https://yourdomain.com{uri} permanent
+}
