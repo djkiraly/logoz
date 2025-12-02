@@ -185,3 +185,76 @@ enum QuoteStatus {
   APPROVED
   ARCHIVED
 }
+
+// ===========================================
+// Admin & Authentication
+// ===========================================
+
+model AdminUser {
+  id           String         @id @default(cuid())
+  email        String         @unique
+  passwordHash String
+  name         String
+  role         AdminRole      @default(ADMIN)
+  isActive     Boolean        @default(true)
+  lastLoginAt  DateTime?
+  sessions     AdminSession[]
+  auditLogs    AuditLog[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([email])
+  @@index([role])
+}
+
+model AdminSession {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  user      AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime  @default(now())
+
+  @@index([token])
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model AuditLog {
+  id        String    @id @default(cuid())
+  user      AdminUser @relation(fields: [userId], references: [id])
+  userId    String
+  action    String
+  entity    String
+  entityId  String?
+  details   Json?
+  ipAddress String?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([entity])
+  @@index([createdAt(sort: Desc)])
+}
+
+model PageView {
+  id        String   @id @default(cuid())
+  path      String
+  referrer  String?
+  userAgent String?
+  ipAddress String?
+  sessionId String?
+  createdAt DateTime @default(now())
+
+  @@index([path])
+  @@index([createdAt(sort: Desc)])
+  @@index([sessionId])
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  EDITOR
+}

@@ -1,6 +1,15 @@
-import { PrismaClient, FulfillmentMethod } from '@prisma/client';
+import { PrismaClient, FulfillmentMethod, AdminRole } from '@prisma/client';
 
 const prisma = new PrismaClient();
+
+// Simple SHA-256 hash function for seeding
+async function hashPassword(password: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 const categories = [
   {
@@ -319,6 +328,27 @@ async function seed() {
       create: faq,
     });
   }
+
+  // Create default admin user
+  const adminPassword = await hashPassword('admin123');
+  await prisma.adminUser.upsert({
+    where: { email: 'admin@logoz.com' },
+    update: {
+      passwordHash: adminPassword,
+      name: 'Admin User',
+      role: AdminRole.SUPER_ADMIN,
+      isActive: true,
+    },
+    create: {
+      email: 'admin@logoz.com',
+      passwordHash: adminPassword,
+      name: 'Admin User',
+      role: AdminRole.SUPER_ADMIN,
+      isActive: true,
+    },
+  });
+
+  console.log('✓ Seeded admin user: admin@logoz.com / admin123');
 }
 
 seed()

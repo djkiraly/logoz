@@ -120,6 +120,7 @@ export const logger = {
 export const apiLogger = logger.child({ context: 'api' });
 export const dbLogger = logger.child({ context: 'database' });
 export const authLogger = logger.child({ context: 'auth' });
+export const adminLogger = logger.child({ context: 'admin' });
 
 /**
  * Create a request-scoped logger with unique request ID
