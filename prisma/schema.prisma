@@ -1,0 +1,260 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum FulfillmentMethod {
+  EMBROIDERY
+  SCREEN_PRINT
+  DTG
+  VINYL
+  SUBLIMATION
+  LASER
+  PROMO
+}
+
+model SiteSetting {
+  id           Int     @id @default(1)
+  siteName     String  @default("Logoz Custom")
+  heroHeading  String
+  heroCopy     String
+  ctaLabel     String
+  ctaLink      String
+  contactEmail String  @unique
+  contactPhone String
+  address      String
+  announcement String?
+  theme        Json?
+}
+
+model Category {
+  id          String    @id @default(cuid())
+  slug        String    @unique
+  title       String
+  description String
+  featured    Boolean   @default(false)
+  services    Service[]
+  products    Product[]
+
+  @@index([featured, title])
+}
+
+model Supplier {
+  id           String              @id @default(cuid())
+  name         String              @unique
+  logoUrl      String?
+  website      String?
+  description  String?
+  leadTimeDays Int?
+  capabilities FulfillmentMethod[]
+  featured     Boolean             @default(false)
+  products     Product[]
+
+  @@index([featured, name])
+}
+
+model Product {
+  id           String              @id @default(cuid())
+  sku          String              @unique
+  name         String
+  description  String
+  heroImageUrl String?
+  gallery      String[]
+  basePrice    Decimal             @db.Money
+  minQuantity  Int                 @default(1)
+  category     Category            @relation(fields: [categoryId], references: [id])
+  categoryId   String
+  supplier     Supplier?           @relation(fields: [supplierId], references: [id])
+  supplierId   String?
+  fulfillment  FulfillmentMethod[]
+  variants     Variant[]
+  designs      Design[]
+  collections  Collection[]        @relation("CollectionProducts")
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@index([categoryId])
+  @@index([supplierId])
+  @@index([createdAt(sort: Desc)])
+}
+
+model Variant {
+  id          String   @id @default(cuid())
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId   String
+  color       String
+  size        String
+  priceAdjust Decimal? @db.Money
+  inventory   Int?     @default(0)
+
+  @@unique([productId, color, size])
+  @@index([productId])
+}
+
+model Design {
+  id           String      @id @default(cuid())
+  title        String
+  description  String?
+  previewUrl   String
+  sourceFile   String?
+  tags         String[]
+  products     Product[]
+  collection   Collection? @relation(fields: [collectionId], references: [id])
+  collectionId String?
+  featured     Boolean     @default(false)
+
+  @@index([featured])
+  @@index([collectionId])
+}
+
+model Collection {
+  id          String    @id @default(cuid())
+  slug        String    @unique
+  name        String
+  description String
+  heroImage   String?
+  products    Product[] @relation("CollectionProducts")
+  designs     Design[]
+}
+
+model Service {
+  id         String              @id @default(cuid())
+  slug       String              @unique
+  title      String
+  summary    String
+  body       String
+  heroImage  String?
+  methods    FulfillmentMethod[]
+  ctaLabel   String?
+  ctaLink    String?
+  categories Category[]
+}
+
+model Testimonial {
+  id        String  @id @default(cuid())
+  author    String  @unique
+  title     String?
+  company   String?
+  quote     String
+  rating    Int     @default(5)
+  avatarUrl String?
+
+  @@index([rating(sort: Desc)])
+}
+
+model Faq {
+  id       String  @id @default(cuid())
+  question String  @unique
+  answer   String
+  category String?
+
+  @@index([category])
+}
+
+model QuoteRequest {
+  id          String            @id @default(cuid())
+  contactName String
+  company     String?
+  email       String
+  phone       String?
+  dueDate     DateTime?
+  quantity    Int
+  serviceType FulfillmentMethod
+  notes       String?
+  productId   String?
+  status      QuoteStatus       @default(PENDING)
+  attachments String[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([email])
+  @@index([status])
+  @@index([serviceType])
+  @@index([createdAt(sort: Desc)])
+}
+
+enum QuoteStatus {
+  PENDING
+  REVIEWING
+  SENT
+  APPROVED
+  ARCHIVED
+}
+
+// ===========================================
+// Admin & Authentication
+// ===========================================
+
+model AdminUser {
+  id           String         @id @default(cuid())
+  email        String         @unique
+  passwordHash String
+  name         String
+  role         AdminRole      @default(ADMIN)
+  isActive     Boolean        @default(true)
+  lastLoginAt  DateTime?
+  sessions     AdminSession[]
+  auditLogs    AuditLog[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([email])
+  @@index([role])
+}
+
+model AdminSession {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  user      AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime  @default(now())
+
+  @@index([token])
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model AuditLog {
+  id        String    @id @default(cuid())
+  user      AdminUser @relation(fields: [userId], references: [id])
+  userId    String
+  action    String
+  entity    String
+  entityId  String?
+  details   Json?
+  ipAddress String?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([entity])
+  @@index([createdAt(sort: Desc)])
+}
+
+model PageView {
+  id        String   @id @default(cuid())
+  path      String
+  referrer  String?
+  userAgent String?
+  ipAddress String?
+  sessionId String?
+  createdAt DateTime @default(now())
+
+  @@index([path])
+  @@index([createdAt(sort: Desc)])
+  @@index([sessionId])
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  EDITOR
+}

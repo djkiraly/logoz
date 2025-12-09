@@ -1,0 +1,46 @@
+@import 'tailwindcss';
+
+:root {
+  color-scheme: light;
+  --surface: 7 10 18;
+  --surface-muted: 12 16 28;
+  --surface-card: 16 20 34;
+  --surface-border: 32 43 73;
+  --brand: 107 114 255;
+  --brand-accent: 255 111 97;
+  --text-primary: 240 242 255;
+  --text-muted: 149 162 197;
+}
+
+@theme inline {
+  --font-sans: var(--font-display);
+  --font-mono: var(--font-sans);
+  --color-page: rgb(var(--surface));
+  --color-card: rgb(var(--surface-card));
+  --color-border: rgb(var(--surface-border));
+  --color-brand: rgb(var(--brand));
+  --color-brand-accent: rgb(var(--brand-accent));
+  --color-text: rgb(var(--text-primary));
+  --color-muted: rgb(var(--text-muted));
+  --shadow-glow: 0px 20px 120px rgba(107, 114, 255, 0.18);
+}
+
+* {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+body {
+  background: radial-gradient(circle at top, rgba(107, 114, 255, 0.12), transparent 50%),
+    rgb(var(--surface));
+  color: rgb(var(--text-primary));
+  font-family: var(--font-display);
+  min-height: 100vh;
+}
+
+.glass-panel {
+  @apply rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-xl shadow-black/30;
+}
+
+.grid-auto-fill {
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
