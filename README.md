@@ -164,7 +164,6 @@ logoz/
 │   └── seed.ts             # Seed script
 ├── deploy/                 # Deployment configurations
 │   ├── Caddyfile           # Caddy reverse proxy config
-│   ├── nginx.conf          # nginx config for certbot
 │   └── setup-ssl.sh        # SSL setup helper script
 ├── Dockerfile              # Container build
 ├── docker-compose.yml      # Full stack deployment
@@ -248,72 +247,93 @@ sudo pm2 startup
 
 **Note:** Port 80 requires root/admin privileges on most systems. For HTTPS, use one of the methods below.
 
-### HTTPS with Let's Encrypt
+### Production Deployment with Docker (Recommended)
 
-#### Option 1: Docker Compose with Caddy (Easiest)
+Deploy with Docker Compose and Caddy for automatic HTTPS:
 
-This method automatically handles SSL certificates:
+**Prerequisites:**
+- Docker and Docker Compose installed
+- Domain name with DNS A record pointing to your server
+- Ports 80 and 443 open on your firewall
 
 ```bash
-# 1. Edit deploy/Caddyfile - replace "yourdomain.com" with your domain
-nano deploy/Caddyfile
+# 1. Clone and configure
+git clone https://github.com/djkiraly/logoz.git
+cd logoz
 
-# 2. Configure environment
+# 2. Set up environment
 cp .env.example .env
 nano .env  # Add your Neon database credentials
 
-# 3. Start everything
+# 3. Configure your domain
+sed -i 's/yourdomain.com/your-actual-domain.com/g' deploy/Caddyfile
+
+# 4. Deploy
 docker-compose up -d
+
+# 5. Run database migrations (first time only)
+docker-compose exec app npx prisma db push
+docker-compose exec app npm run db:seed
 ```
 
-Caddy will automatically obtain and renew Let's Encrypt certificates.
+Caddy automatically:
+- Obtains Let's Encrypt SSL certificates
+- Renews certificates before expiry
+- Redirects HTTP → HTTPS
+- Enables HTTP/2 and HTTP/3
 
-#### Option 2: Caddy (without Docker)
+**Useful commands:**
+```bash
+# View logs
+docker-compose logs -f
+
+# Restart services
+docker-compose restart
+
+# Update deployment
+git pull
+docker-compose up -d --build
+
+# Stop services
+docker-compose down
+```
+
+### Production Deployment without Docker
+
+For VPS/bare-metal deployment with Caddy:
 
 ```bash
-# 1. Install Caddy
-# Debian/Ubuntu:
+# 1. Install Caddy (Debian/Ubuntu)
 sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
 sudo apt update && sudo apt install caddy
 
-# 2. Edit Caddyfile with your domain
-sed -i 's/yourdomain.com/your-actual-domain.com/g' deploy/Caddyfile
+# 2. Install Node.js and PM2
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+npm install -g pm2
 
-# 3. Copy config and start
+# 3. Clone and build
+git clone https://github.com/djkiraly/logoz.git
+cd logoz
+npm ci
+cp .env.example .env
+nano .env  # Add your database credentials
+npx prisma generate
+npm run build
+
+# 4. Configure Caddy with your domain
+sed -i 's/yourdomain.com/your-actual-domain.com/g' deploy/Caddyfile
+sed -i 's/app:3000/localhost:3000/g' deploy/Caddyfile  # Use localhost instead of Docker network
 sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
 sudo systemctl restart caddy
 
-# 4. Start Next.js app
+# 5. Start the application
 pm2 start npm --name "logoz" -- start
+pm2 save
+sudo pm2 startup
 ```
-
-#### Option 3: nginx + certbot
-
-```bash
-# 1. Install nginx and certbot
-sudo apt install -y nginx certbot python3-certbot-nginx
-
-# 2. Edit nginx config with your domain
-sed -i 's/yourdomain.com/your-actual-domain.com/g' deploy/nginx.conf
-
-# 3. Copy config
-sudo cp deploy/nginx.conf /etc/nginx/sites-available/logoz
-sudo ln -s /etc/nginx/sites-available/logoz /etc/nginx/sites-enabled/
-sudo rm /etc/nginx/sites-enabled/default
-
-# 4. Start nginx
-sudo systemctl restart nginx
-
-# 5. Obtain SSL certificate
-sudo certbot --nginx -d your-actual-domain.com -d www.your-actual-domain.com
-
-# 6. Start Next.js app
-pm2 start npm --name "logoz" -- start
-```
-
-Certbot will automatically set up certificate renewal.
 
 ## Testing
 

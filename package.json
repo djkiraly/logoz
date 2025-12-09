@@ -25,6 +25,7 @@
     "@prisma/client": "^6.19.0",
     "@tanstack/react-query": "^5.90.9",
     "@vercel/postgres": "^0.10.0",
+    "claude": "^0.1.1",
     "clsx": "^2.1.1",
     "lru-cache": "^11.2.4",
     "lucide-react": "^0.553.0",

@@ -22,7 +22,12 @@
       "WebSearch",
       "Bash(if exist \".next\" rmdir /s /q \".next\")",
       "Bash(ls:*)",
-      "Bash(npx prisma generate:*)"
+      "Bash(npx prisma generate:*)",
+      "Bash(git pull:*)",
+      "Bash(git fetch:*)",
+      "Bash(git checkout:*)",
+      "Bash(git ls-tree:*)",
+      "Bash(git rm:*)"
     ],
     "deny": [],
     "ask": []
