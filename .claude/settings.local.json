@@ -17,7 +17,12 @@
       "Bash(git remote:*)",
       "Bash(git branch:*)",
       "Bash(git push:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(npm run db:generate:*)",
+      "WebSearch",
+      "Bash(if exist \".next\" rmdir /s /q \".next\")",
+      "Bash(ls:*)",
+      "Bash(npx prisma generate:*)"
     ],
     "deny": [],
     "ask": []
