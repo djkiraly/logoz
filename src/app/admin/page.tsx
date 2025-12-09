@@ -1,3 +1,5 @@
+import { redirect } from 'next/navigation';
+import { getCurrentUser } from '@/lib/auth';
 import { prisma, isDatabaseEnabled } from '@/lib/prisma';
 import {
   FileText,
@@ -55,6 +57,12 @@ async function getRecentQuotes() {
 }
 
 export default async function AdminDashboard() {
+  const user = await getCurrentUser();
+
+  if (!user) {
+    redirect('/admin/login');
+  }
+
   const stats = await getStats();
   const recentQuotes = await getRecentQuotes();
 

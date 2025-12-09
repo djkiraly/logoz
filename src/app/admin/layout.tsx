@@ -1,4 +1,3 @@
-import { redirect } from 'next/navigation';
 import { getCurrentUser } from '@/lib/auth';
 import AdminSidebar from '@/components/admin/admin-sidebar';
 import AdminHeader from '@/components/admin/admin-header';
@@ -15,25 +14,8 @@ export default async function AdminLayout({
 }) {
   const user = await getCurrentUser();
 
-  // Check if we're on the login page
-  // This is a simplified check - middleware handles proper routing
-  const isLoginPage =
-    typeof window === 'undefined'
-      ? false
-      : window.location.pathname === '/admin/login';
-
-  // Don't require auth for login page
-  if (!user && !isLoginPage) {
-    // We'll handle this in middleware, but this is a fallback
-    redirect('/admin/login');
-  }
-
-  // If on login page and already authenticated, redirect to dashboard
-  if (user && isLoginPage) {
-    redirect('/admin');
-  }
-
-  // Login page has its own layout
+  // If not authenticated, render children without admin chrome
+  // The individual pages/middleware will handle redirects
   if (!user) {
     return <>{children}</>;
   }
