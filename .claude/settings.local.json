@@ -36,7 +36,13 @@
       "Bash(rm:*)",
       "Bash(copy \"D:\\Projects\\Logoz\\web\\.env\" \"D:\\Projects\\Logoz\\.env\")",
       "Bash(curl:*)",
-      "Bash(del /f \"D:\\Projects\\Logoz\\nul\")"
+      "Bash(del /f \"D:\\Projects\\Logoz\\nul\")",
+      "Bash(git -C \"D:/Projects/Logoz\" status)",
+      "Bash(git -C \"D:/Projects/Logoz\" status --porcelain)",
+      "Bash(git -C \"D:/Projects/Logoz\" ls-tree -r HEAD --name-only)",
+      "Bash(git -C \"D:/Projects/Logoz\" log --oneline -5)",
+      "Bash(git -C \"D:/Projects/Logoz\" log -1 --stat)",
+      "Bash(git -C \"D:/Projects/Logoz\" fetch origin)"
     ],
     "deny": [],
     "ask": []
