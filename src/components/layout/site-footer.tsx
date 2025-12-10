@@ -1,4 +1,7 @@
+'use client';
+
 import Link from 'next/link';
+import { useState, useEffect } from 'react';
 import type { SiteSettings } from '@/lib/site-data';
 
 const footerLinks = [
@@ -33,6 +36,12 @@ type SiteFooterProps = {
 };
 
 export function SiteFooter({ settings }: SiteFooterProps) {
+  const [year, setYear] = useState<number | null>(null);
+
+  useEffect(() => {
+    setYear(new Date().getFullYear());
+  }, []);
+
   return (
     <footer className="border-t border-white/10 bg-[#05060a]/80">
       <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-14 md:grid-cols-4">
@@ -67,7 +76,7 @@ export function SiteFooter({ settings }: SiteFooterProps) {
         ))}
       </div>
       <div className="border-t border-white/10 px-4 py-4 text-center text-xs text-white/50">
-        © {new Date().getFullYear()} {settings.siteName}. Crafted in the cloud.
+        © {year ?? ''} {settings.siteName}. Crafted in the cloud.
       </div>
     </footer>
   );

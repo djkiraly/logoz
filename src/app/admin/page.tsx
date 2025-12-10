@@ -219,7 +219,7 @@ export default async function AdminDashboard() {
                   </span>
                   <p className="text-xs text-slate-500 mt-1 flex items-center gap-1 justify-end">
                     <Clock className="w-3 h-3" />
-                    {new Date(quote.createdAt).toLocaleDateString()}
+                    {new Date(quote.createdAt).toLocaleDateString('en-US')}
                   </p>
                 </div>
               </div>

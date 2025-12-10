@@ -64,7 +64,7 @@ export function SiteHeader({ settings }: SiteHeaderProps) {
           </button>
         </div>
       </div>
-      {isOpen ? (
+      {isOpen && (
         <div className="border-t border-white/10 px-4 pb-6 pt-2 lg:hidden">
           <nav className="flex flex-col gap-3 text-base">
             {navigation.map((item) => (
@@ -86,7 +86,7 @@ export function SiteHeader({ settings }: SiteHeaderProps) {
             </Link>
           </nav>
         </div>
-      ) : null}
+      )}
     </header>
   );
 }
