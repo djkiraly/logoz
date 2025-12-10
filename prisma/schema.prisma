@@ -30,6 +30,7 @@ model SiteSetting {
   address      String
   announcement String?
   theme        Json?
+  gcsConfig    Json?
 }
 
 model Category {

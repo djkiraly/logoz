@@ -13,6 +13,7 @@ import {
   Bell,
   Shield,
   X,
+  Store,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useState, useEffect } from 'react';
@@ -37,6 +38,7 @@ const navigation: NavItem[] = [
   { name: 'Site Settings', href: '/admin/settings', icon: Settings },
   { name: 'Appearance', href: '/admin/appearance', icon: Palette },
   { name: 'Products', href: '/admin/products', icon: Package },
+  { name: 'Vendors', href: '/admin/vendors', icon: Store },
   { name: 'Quotes', href: '/admin/quotes', icon: FileText },
   { name: 'Users', href: '/admin/users', icon: Users },
 ];

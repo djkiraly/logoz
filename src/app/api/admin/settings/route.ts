@@ -3,32 +3,61 @@ import { z } from 'zod';
 import { prisma, isDatabaseEnabled } from '@/lib/prisma';
 import { getCurrentUser, logAuditEvent } from '@/lib/auth';
 import { handleApiError, ApiException } from '@/lib/api-utils';
-import { createRequestLogger } from '@/lib/logger';
 import { getClientIp } from '@/lib/rate-limit';
 
+export const dynamic = 'force-dynamic';
+
+const gcsConfigSchema = z.object({
+  projectId: z.string().min(1),
+  bucketName: z.string().min(1),
+  clientEmail: z.string().email(),
+  privateKey: z.string().min(1),
+  enabled: z.boolean(),
+}).nullable().optional();
+
 const settingsSchema = z.object({
-  siteName: z.string().min(1).max(100),
-  heroHeading: z.string().max(200),
-  heroCopy: z.string().max(1000),
-  ctaLabel: z.string().max(50),
-  ctaLink: z.string().max(200),
-  contactEmail: z.string().email(),
-  contactPhone: z.string().max(30),
-  address: z.string().max(500),
-  announcement: z.string().max(200).optional(),
+  siteName: z.string().max(100).optional().or(z.literal('')),
+  heroHeading: z.string().max(200).optional().or(z.literal('')),
+  heroCopy: z.string().max(1000).optional().or(z.literal('')),
+  ctaLabel: z.string().max(50).optional().or(z.literal('')),
+  ctaLink: z.string().max(200).optional().or(z.literal('')),
+  contactEmail: z.string().max(200).optional().or(z.literal('')), // Removed strict email validation - DB handles unique
+  contactPhone: z.string().max(30).optional().or(z.literal('')),
+  address: z.string().max(500).optional().or(z.literal('')),
+  announcement: z.string().max(200).optional().or(z.literal('')),
+  gcsConfig: gcsConfigSchema,
 });
 
-export async function PUT(request: Request) {
-  const reqLogger = createRequestLogger(request);
-
+// GET: Load all settings
+export async function GET() {
   try {
-    // Check authentication
     const user = await getCurrentUser();
     if (!user) {
       throw new ApiException('Unauthorized', 401, 'UNAUTHORIZED');
     }
 
-    // Check authorization (only SUPER_ADMIN and ADMIN can update settings)
+    if (!isDatabaseEnabled) {
+      return NextResponse.json({ ok: true, data: null });
+    }
+
+    const settings = await prisma.siteSetting.findFirst({
+      where: { id: 1 },
+    });
+
+    return NextResponse.json({ ok: true, data: settings });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+// PUT: Update settings
+export async function PUT(request: Request) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new ApiException('Unauthorized', 401, 'UNAUTHORIZED');
+    }
+
     if (user.role === 'EDITOR') {
       throw new ApiException('Insufficient permissions', 403, 'FORBIDDEN');
     }
@@ -38,9 +67,12 @@ export async function PUT(request: Request) {
     }
 
     const body = await request.json();
+    console.log('[Settings API] Received body:', JSON.stringify(body).substring(0, 200));
+
     const parsed = settingsSchema.safeParse(body);
 
     if (!parsed.success) {
+      console.log('[Settings API] Validation failed:', parsed.error.flatten());
       return NextResponse.json(
         {
           error: 'Validation failed',
@@ -53,33 +85,73 @@ export async function PUT(request: Request) {
 
     const data = parsed.data;
 
-    // Upsert settings (create if not exists, update if exists)
-    const settings = await prisma.siteSetting.upsert({
+    // Get existing settings
+    const existingSettings = await prisma.siteSetting.findFirst({
       where: { id: 1 },
-      create: {
-        id: 1,
-        siteName: data.siteName,
-        heroHeading: data.heroHeading,
-        heroCopy: data.heroCopy,
-        ctaLabel: data.ctaLabel,
-        ctaLink: data.ctaLink,
-        contactEmail: data.contactEmail,
-        contactPhone: data.contactPhone,
-        address: data.address,
-        announcement: data.announcement || null,
-      },
-      update: {
-        siteName: data.siteName,
-        heroHeading: data.heroHeading,
-        heroCopy: data.heroCopy,
-        ctaLabel: data.ctaLabel,
-        ctaLink: data.ctaLink,
-        contactEmail: data.contactEmail,
-        contactPhone: data.contactPhone,
-        address: data.address,
-        announcement: data.announcement || null,
-      },
     });
+
+    console.log('[Settings API] Existing settings found:', !!existingSettings);
+
+    // Helper to get value
+    const getValue = (newVal: string | undefined, existingVal: string | undefined | null, defaultVal: string): string => {
+      if (newVal !== undefined && newVal !== '') return newVal;
+      if (existingVal !== undefined && existingVal !== null && existingVal !== '') return existingVal;
+      return defaultVal;
+    };
+
+    // Build settings data without gcsConfig first
+    const baseSettingsData = {
+      siteName: getValue(data.siteName, existingSettings?.siteName, 'My Store'),
+      heroHeading: getValue(data.heroHeading, existingSettings?.heroHeading, 'Welcome'),
+      heroCopy: getValue(data.heroCopy, existingSettings?.heroCopy, ''),
+      ctaLabel: getValue(data.ctaLabel, existingSettings?.ctaLabel, 'Get Started'),
+      ctaLink: getValue(data.ctaLink, existingSettings?.ctaLink, '/'),
+      contactEmail: getValue(data.contactEmail, existingSettings?.contactEmail, 'admin@example.com'),
+      contactPhone: getValue(data.contactPhone, existingSettings?.contactPhone, ''),
+      address: getValue(data.address, existingSettings?.address, ''),
+      announcement: data.announcement !== undefined ? (data.announcement || null) : (existingSettings?.announcement || null),
+    };
+
+    // Add gcsConfig if provided (only if field exists in schema)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const settingsData: any = { ...baseSettingsData };
+    try {
+      if (data.gcsConfig !== undefined) {
+        settingsData.gcsConfig = data.gcsConfig;
+      } else if (existingSettings && 'gcsConfig' in existingSettings) {
+        settingsData.gcsConfig = existingSettings.gcsConfig;
+      }
+    } catch {
+      // gcsConfig field may not exist in schema yet
+      console.log('[Settings API] gcsConfig field not available in schema');
+    }
+
+    console.log('[Settings API] Upserting with data keys:', Object.keys(settingsData));
+    console.log('[Settings API] Data values:', JSON.stringify(settingsData, null, 2));
+
+    // Upsert settings with better error handling
+    let settings;
+    try {
+      settings = await prisma.siteSetting.upsert({
+        where: { id: 1 },
+        create: {
+          id: 1,
+          ...settingsData,
+        },
+        update: settingsData,
+      });
+      console.log('[Settings API] Upsert successful');
+    } catch (dbError) {
+      console.error('[Settings API] Database error:', dbError);
+      // Check for unique constraint violation
+      if (dbError instanceof Error && dbError.message.includes('Unique constraint')) {
+        return NextResponse.json(
+          { error: 'Email address is already in use', code: 'DUPLICATE_EMAIL' },
+          { status: 400 }
+        );
+      }
+      throw dbError;
+    }
 
     // Log audit event
     const clientIp = getClientIp(request);
@@ -92,10 +164,9 @@ export async function PUT(request: Request) {
       clientIp
     );
 
-    reqLogger.info('Settings updated', { userId: user.id });
-
     return NextResponse.json({ ok: true, data: settings });
   } catch (error) {
+    console.error('[Settings API] Error:', error);
     return handleApiError(error);
   }
 }

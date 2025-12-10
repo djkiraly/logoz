@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Save, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Save, Loader2, AlertCircle, CheckCircle, Cloud, Eye, EyeOff, TestTube, Upload } from 'lucide-react';
 
 type SiteSettings = {
   siteName: string;
@@ -13,6 +13,22 @@ type SiteSettings = {
   contactPhone: string;
   address: string;
   announcement: string;
+};
+
+type GcsConfig = {
+  projectId: string;
+  bucketName: string;
+  clientEmail: string;
+  privateKey: string;
+  enabled: boolean;
+};
+
+const emptyGcsConfig: GcsConfig = {
+  projectId: '',
+  bucketName: '',
+  clientEmail: '',
+  privateKey: '',
+  enabled: false,
 };
 
 export default function SettingsPage() {
@@ -27,6 +43,11 @@ export default function SettingsPage() {
     address: '',
     announcement: '',
   });
+  const [gcsConfig, setGcsConfig] = useState<GcsConfig>(emptyGcsConfig);
+  const [showPrivateKey, setShowPrivateKey] = useState(false);
+  const [isTestingGcs, setIsTestingGcs] = useState(false);
+  const [gcsTestResult, setGcsTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(
@@ -39,7 +60,7 @@ export default function SettingsPage() {
 
   const fetchSettings = async () => {
     try {
-      const response = await fetch('/api/settings');
+      const response = await fetch('/api/admin/settings');
       const data = await response.json();
       if (data.data) {
         setSettings({
@@ -53,6 +74,15 @@ export default function SettingsPage() {
           address: data.data.address || '',
           announcement: data.data.announcement || '',
         });
+        if (data.data.gcsConfig) {
+          setGcsConfig({
+            projectId: data.data.gcsConfig.projectId || '',
+            bucketName: data.data.gcsConfig.bucketName || '',
+            clientEmail: data.data.gcsConfig.clientEmail || '',
+            privateKey: data.data.gcsConfig.privateKey || '',
+            enabled: data.data.gcsConfig.enabled || false,
+          });
+        }
       }
     } catch (error) {
       console.error('Failed to fetch settings:', error);
@@ -69,18 +99,101 @@ export default function SettingsPage() {
       const response = await fetch('/api/admin/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings),
+        body: JSON.stringify({
+          ...settings,
+          gcsConfig: gcsConfig.projectId ? gcsConfig : null,
+        }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to save settings');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to save settings');
       }
 
       setMessage({ type: 'success', text: 'Settings saved successfully!' });
-    } catch {
-      setMessage({ type: 'error', text: 'Failed to save settings. Please try again.' });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to save settings';
+      setMessage({ type: 'error', text: `${errorMessage}. Please try again.` });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleTestGcsConnection = async () => {
+    if (!gcsConfig.projectId || !gcsConfig.bucketName || !gcsConfig.clientEmail || !gcsConfig.privateKey) {
+      setGcsTestResult({ success: false, message: 'Please fill in all GCS configuration fields' });
+      return;
+    }
+
+    setIsTestingGcs(true);
+    setGcsTestResult(null);
+
+    try {
+      const response = await fetch('/api/admin/gcs/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: gcsConfig.projectId,
+          bucketName: gcsConfig.bucketName,
+          clientEmail: gcsConfig.clientEmail,
+          privateKey: gcsConfig.privateKey,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.ok) {
+        setGcsTestResult({ success: true, message: data.message || 'Connection successful!' });
+      } else {
+        setGcsTestResult({ success: false, message: data.error || 'Connection failed' });
+      }
+    } catch {
+      setGcsTestResult({ success: false, message: 'Failed to test connection. Please try again.' });
+    } finally {
+      setIsTestingGcs(false);
+    }
+  };
+
+  const handleGcsChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setGcsConfig((prev) => ({ ...prev, [name]: value }));
+    setGcsTestResult(null);
+  };
+
+  const handleGcsToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setGcsConfig((prev) => ({ ...prev, enabled: e.target.checked }));
+  };
+
+  const handleJsonFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const json = JSON.parse(event.target?.result as string);
+
+        if (json.type !== 'service_account') {
+          setGcsTestResult({ success: false, message: 'Invalid file: Not a service account JSON file' });
+          return;
+        }
+
+        setGcsConfig((prev) => ({
+          ...prev,
+          projectId: json.project_id || '',
+          clientEmail: json.client_email || '',
+          privateKey: json.private_key || '',
+        }));
+
+        setGcsTestResult({ success: true, message: 'Service account loaded! Enter bucket name and test connection.' });
+      } catch {
+        setGcsTestResult({ success: false, message: 'Invalid JSON file' });
+      }
+    };
+    reader.readAsText(file);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
@@ -297,6 +410,193 @@ export default function SettingsPage() {
               className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 resize-none"
               placeholder="123 Main St, City, State 12345"
             />
+          </div>
+        </div>
+      </div>
+
+      {/* Google Cloud Storage */}
+      <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl">
+        <div className="p-5 border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
+              <Cloud className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-white">Google Cloud Storage</h2>
+              <p className="text-sm text-slate-400">Configure cloud storage for images and files</p>
+            </div>
+          </div>
+        </div>
+        <div className="p-5 space-y-5">
+          {/* Enable Toggle */}
+          <div className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-lg">
+            <div>
+              <p className="text-sm font-medium text-slate-300">Enable Cloud Storage</p>
+              <p className="text-xs text-slate-500">
+                When enabled, all uploads will be stored in Google Cloud Storage
+              </p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={gcsConfig.enabled}
+                onChange={handleGcsToggle}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-cyan-500/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-500"></div>
+            </label>
+          </div>
+
+          {/* Upload JSON File */}
+          <div className="p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-cyan-400">Quick Setup</p>
+                <p className="text-xs text-slate-400">
+                  Upload your service account JSON key file to auto-fill credentials
+                </p>
+              </div>
+              <div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".json"
+                  onChange={handleJsonFileUpload}
+                  className="hidden"
+                  id="gcs-json-upload"
+                />
+                <label
+                  htmlFor="gcs-json-upload"
+                  className="flex items-center gap-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 cursor-pointer transition-colors"
+                >
+                  <Upload className="w-4 h-4" />
+                  Upload JSON Key
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* GCS Configuration Fields */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Project ID
+              </label>
+              <input
+                type="text"
+                name="projectId"
+                value={gcsConfig.projectId}
+                onChange={handleGcsChange}
+                className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                placeholder="my-gcp-project"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Bucket Name
+              </label>
+              <input
+                type="text"
+                name="bucketName"
+                value={gcsConfig.bucketName}
+                onChange={handleGcsChange}
+                className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                placeholder="my-storage-bucket"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Service Account Email
+            </label>
+            <input
+              type="email"
+              name="clientEmail"
+              value={gcsConfig.clientEmail}
+              onChange={handleGcsChange}
+              className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+              placeholder="service-account@project.iam.gserviceaccount.com"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Private Key
+            </label>
+            <div className="relative">
+              <textarea
+                name="privateKey"
+                value={gcsConfig.privateKey}
+                onChange={handleGcsChange}
+                rows={4}
+                className={`w-full px-4 py-2 pr-12 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 resize-none font-mono text-xs ${
+                  !showPrivateKey && gcsConfig.privateKey ? 'text-security-disc' : ''
+                }`}
+                placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
+                style={{
+                  fontFamily: 'monospace',
+                  WebkitTextSecurity: !showPrivateKey && gcsConfig.privateKey ? 'disc' : 'none'
+                } as React.CSSProperties}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPrivateKey(!showPrivateKey)}
+                className="absolute top-2 right-2 p-2 text-slate-400 hover:text-white transition-colors"
+                title={showPrivateKey ? 'Hide private key' : 'Show private key'}
+              >
+                {showPrivateKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              Paste the <code className="text-cyan-400">private_key</code> value from your GCP service account JSON file.
+              Include the entire key from <code className="text-cyan-400">-----BEGIN PRIVATE KEY-----</code> to <code className="text-cyan-400">-----END PRIVATE KEY-----</code>.
+            </p>
+          </div>
+
+          {/* Test Connection */}
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={handleTestGcsConnection}
+              disabled={isTestingGcs}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isTestingGcs ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <TestTube className="w-4 h-4" />
+              )}
+              Test Connection
+            </button>
+
+            {gcsTestResult && (
+              <div
+                className={`flex items-center gap-2 text-sm ${
+                  gcsTestResult.success ? 'text-green-400' : 'text-red-400'
+                }`}
+              >
+                {gcsTestResult.success ? (
+                  <CheckCircle className="w-4 h-4" />
+                ) : (
+                  <AlertCircle className="w-4 h-4" />
+                )}
+                {gcsTestResult.message}
+              </div>
+            )}
+          </div>
+
+          {/* Help Text */}
+          <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+            <h4 className="text-sm font-medium text-blue-400 mb-2">Setup Instructions</h4>
+            <ol className="text-xs text-slate-400 space-y-1 list-decimal list-inside">
+              <li>Create a Google Cloud project and enable the Cloud Storage API</li>
+              <li>Create a Cloud Storage bucket for your files</li>
+              <li>Create a service account with Storage Admin role</li>
+              <li>Generate a JSON key for the service account</li>
+              <li>Copy the project ID, bucket name, client email, and private key here</li>
+            </ol>
           </div>
         </div>
       </div>

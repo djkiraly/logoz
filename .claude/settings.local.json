@@ -28,7 +28,15 @@
       "Bash(git checkout:*)",
       "Bash(git ls-tree:*)",
       "Bash(git rm:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(npm run dev:*)",
+      "Bash(taskkill:*)",
+      "Bash(dir:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(rm:*)",
+      "Bash(copy \"D:\\Projects\\Logoz\\web\\.env\" \"D:\\Projects\\Logoz\\.env\")",
+      "Bash(curl:*)",
+      "Bash(del /f \"D:\\Projects\\Logoz\\nul\")"
     ],
     "deny": [],
     "ask": []

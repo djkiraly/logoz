@@ -1,0 +1,20 @@
+[Unit]
+Description=Logoz Next.js Application
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/var/www/logoz
+ExecStart=/usr/bin/npm run start
+Restart=on-failure
+RestartSec=10
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=logoz
+Environment=NODE_ENV=production
+Environment=PORT=3000
+EnvironmentFile=/var/www/logoz/.env
+
+[Install]
+WantedBy=multi-user.target
