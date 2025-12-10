@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { headers } from 'next/headers';
 import { z } from 'zod';
 import { prisma, isDatabaseEnabled } from '@/lib/prisma';
 import { getCurrentUser, hashPassword, logAuditEvent } from '@/lib/auth';
@@ -7,6 +6,7 @@ import { handleApiError, ApiException } from '@/lib/api-utils';
 import { createRequestLogger } from '@/lib/logger';
 import { getClientIp } from '@/lib/rate-limit';
 import { sendVerificationEmail, isEmailVerificationEnabled } from '@/lib/email-verification';
+import { getBaseUrl } from '@/lib/url-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -153,10 +153,7 @@ export async function POST(request: Request) {
     // Send verification email if enabled
     let verificationSent = false;
     if (verificationEnabled) {
-      const headersList = await headers();
-      const host = headersList.get('host') || 'localhost:3000';
-      const protocol = headersList.get('x-forwarded-proto') || 'http';
-      const baseUrl = `${protocol}://${host}`;
+      const baseUrl = await getBaseUrl();
 
       const verifyResult = await sendVerificationEmail(
         newUser.id,

@@ -408,6 +408,10 @@ model AdminUser {
   verificationToken String?   @unique
   verificationTokenExpiry DateTime?
 
+  // Password reset
+  passwordResetToken String?   @unique
+  passwordResetTokenExpiry DateTime?
+
   lastLoginAt  DateTime?
   sessions     AdminSession[]
   auditLogs    AuditLog[]
@@ -417,6 +421,7 @@ model AdminUser {
   @@index([email])
   @@index([role])
   @@index([verificationToken])
+  @@index([passwordResetToken])
 }
 
 model AdminSession {
