@@ -42,7 +42,9 @@
       "Bash(git -C \"D:/Projects/Logoz\" ls-tree -r HEAD --name-only)",
       "Bash(git -C \"D:/Projects/Logoz\" log --oneline -5)",
       "Bash(git -C \"D:/Projects/Logoz\" log -1 --stat)",
-      "Bash(git -C \"D:/Projects/Logoz\" fetch origin)"
+      "Bash(git -C \"D:/Projects/Logoz\" fetch origin)",
+      "Bash(npx next build)",
+      "Bash(git restore:*)"
     ],
     "deny": [],
     "ask": []

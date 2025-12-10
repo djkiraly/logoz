@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
+import { headers } from 'next/headers';
 import { z } from 'zod';
 import { prisma, isDatabaseEnabled } from '@/lib/prisma';
 import { getCurrentUser, hashPassword, logAuditEvent } from '@/lib/auth';
 import { handleApiError, ApiException } from '@/lib/api-utils';
 import { createRequestLogger } from '@/lib/logger';
 import { getClientIp } from '@/lib/rate-limit';
+import { sendVerificationEmail, isEmailVerificationEnabled } from '@/lib/email-verification';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,6 +42,7 @@ export async function GET() {
         name: true,
         role: true,
         isActive: true,
+        emailVerified: true,
         lastLoginAt: true,
         createdAt: true,
         _count: {
@@ -110,6 +113,9 @@ export async function POST(request: Request) {
     // Hash password
     const passwordHash = await hashPassword(data.password);
 
+    // Check if email verification is enabled
+    const verificationEnabled = await isEmailVerificationEnabled();
+
     // Create user
     const newUser = await prisma.adminUser.create({
       data: {
@@ -118,6 +124,7 @@ export async function POST(request: Request) {
         passwordHash,
         role: data.role,
         isActive: data.isActive,
+        emailVerified: !verificationEnabled, // If verification disabled, mark as verified
       },
       select: {
         id: true,
@@ -125,6 +132,7 @@ export async function POST(request: Request) {
         name: true,
         role: true,
         isActive: true,
+        emailVerified: true,
         createdAt: true,
       },
     });
@@ -142,7 +150,36 @@ export async function POST(request: Request) {
 
     reqLogger.info('User created', { userId: currentUser.id, newUserId: newUser.id });
 
-    return NextResponse.json({ ok: true, data: newUser }, { status: 201 });
+    // Send verification email if enabled
+    let verificationSent = false;
+    if (verificationEnabled) {
+      const headersList = await headers();
+      const host = headersList.get('host') || 'localhost:3000';
+      const protocol = headersList.get('x-forwarded-proto') || 'http';
+      const baseUrl = `${protocol}://${host}`;
+
+      const verifyResult = await sendVerificationEmail(
+        newUser.id,
+        newUser.email,
+        newUser.name,
+        baseUrl
+      );
+      verificationSent = verifyResult.success;
+
+      if (!verifyResult.success) {
+        reqLogger.warn('Failed to send verification email', {
+          userId: newUser.id,
+          error: verifyResult.error,
+        });
+      }
+    }
+
+    return NextResponse.json({
+      ok: true,
+      data: newUser,
+      verificationSent,
+      verificationEnabled,
+    }, { status: 201 });
   } catch (error) {
     return handleApiError(error);
   }

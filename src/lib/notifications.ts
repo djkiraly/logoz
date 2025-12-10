@@ -1,0 +1,401 @@
+import { prisma, isDatabaseEnabled } from './prisma';
+import { sendEmail } from './gmail';
+import { adminLogger } from './logger';
+
+// Define types locally to avoid Prisma client dependency issues during build
+type NotificationType =
+  | 'INTERNAL_QUOTE_CREATED'
+  | 'INTERNAL_QUOTE_STATUS_CHANGE'
+  | 'INTERNAL_USER_VERIFICATION'
+  | 'CUSTOMER_QUOTE_SENT'
+  | 'CUSTOMER_QUOTE_STATUS_CHANGE';
+
+type NotificationChannel = 'EMAIL' | 'SMS';
+
+type NotificationContext = {
+  quote?: {
+    id: string;
+    quoteNumber: string;
+    total: string | number;
+    status: string;
+    customerName?: string | null;
+    customerEmail?: string | null;
+    customerCompany?: string | null;
+    title?: string | null;
+    validUntil?: string | null;
+  };
+  customer?: {
+    id: string;
+    contactName: string;
+    email: string;
+    companyName?: string | null;
+  };
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  previousStatus?: string;
+  newStatus?: string;
+};
+
+// Default email templates
+const DEFAULT_TEMPLATES: Record<NotificationType, { subject: string; body: string }> = {
+  INTERNAL_QUOTE_CREATED: {
+    subject: 'New Quote Created: {{quoteNumber}}',
+    body: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #0891b2;">New Quote Created</h2>
+        <p>A new quote has been created in the system.</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+          <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;"><strong>Quote Number:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">{{quoteNumber}}</td></tr>
+          <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;"><strong>Customer:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">{{customerName}}</td></tr>
+          <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;"><strong>Company:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">{{customerCompany}}</td></tr>
+          <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;"><strong>Total:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">{{quoteTotal}}</td></tr>
+        </table>
+        <p style="color: #64748b; font-size: 14px;">Log in to the admin dashboard to view the full quote details.</p>
+      </div>
+    `,
+  },
+  INTERNAL_QUOTE_STATUS_CHANGE: {
+    subject: 'Quote Status Changed: {{quoteNumber}} - {{newStatus}}',
+    body: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #0891b2;">Quote Status Updated</h2>
+        <p>A quote status has been changed.</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+          <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;"><strong>Quote Number:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">{{quoteNumber}}</td></tr>
+          <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;"><strong>Customer:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">{{customerName}}</td></tr>
+          <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;"><strong>Previous Status:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">{{previousStatus}}</td></tr>
+          <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;"><strong>New Status:</strong></td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;"><strong style="color: #0891b2;">{{newStatus}}</strong></td></tr>
+        </table>
+      </div>
+    `,
+  },
+  INTERNAL_USER_VERIFICATION: {
+    subject: 'Verify Your Email - Logoz Custom Admin',
+    body: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #0891b2;">Email Verification</h2>
+        <p>Hello {{userName}},</p>
+        <p>Please verify your email address to access the Logoz Custom admin dashboard.</p>
+        <p>If you did not request this verification, please ignore this email.</p>
+      </div>
+    `,
+  },
+  CUSTOMER_QUOTE_SENT: {
+    subject: 'Your Quote from Logoz Custom - {{quoteNumber}}',
+    body: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #0891b2 0%, #1e40af 100%); padding: 30px; text-align: center;">
+          <h1 style="color: white; margin: 0;">Logoz Custom</h1>
+        </div>
+        <div style="padding: 30px; background: #f8fafc;">
+          <h2 style="color: #1e293b;">Your Quote is Ready</h2>
+          <p>Hello {{customerName}},</p>
+          <p>Thank you for your interest in our services. We've prepared a quote for you.</p>
+          <table style="width: 100%; border-collapse: collapse; margin: 20px 0; background: white; border-radius: 8px; overflow: hidden;">
+            <tr><td style="padding: 12px; border-bottom: 1px solid #e2e8f0;"><strong>Quote Number:</strong></td><td style="padding: 12px; border-bottom: 1px solid #e2e8f0;">{{quoteNumber}}</td></tr>
+            <tr><td style="padding: 12px; border-bottom: 1px solid #e2e8f0;"><strong>Project:</strong></td><td style="padding: 12px; border-bottom: 1px solid #e2e8f0;">{{quoteTitle}}</td></tr>
+            <tr><td style="padding: 12px; border-bottom: 1px solid #e2e8f0;"><strong>Total:</strong></td><td style="padding: 12px; border-bottom: 1px solid #e2e8f0;"><strong style="color: #0891b2; font-size: 18px;">{{quoteTotal}}</strong></td></tr>
+            <tr><td style="padding: 12px;"><strong>Valid Until:</strong></td><td style="padding: 12px;">{{validUntil}}</td></tr>
+          </table>
+          <p>If you have any questions or would like to proceed, please don't hesitate to contact us.</p>
+          <p style="color: #64748b; font-size: 14px; margin-top: 30px;">Thank you for choosing Logoz Custom!</p>
+        </div>
+      </div>
+    `,
+  },
+  CUSTOMER_QUOTE_STATUS_CHANGE: {
+    subject: 'Quote Update - {{quoteNumber}}',
+    body: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #0891b2 0%, #1e40af 100%); padding: 30px; text-align: center;">
+          <h1 style="color: white; margin: 0;">Logoz Custom</h1>
+        </div>
+        <div style="padding: 30px; background: #f8fafc;">
+          <h2 style="color: #1e293b;">Quote Status Update</h2>
+          <p>Hello {{customerName}},</p>
+          <p>There has been an update to your quote.</p>
+          <table style="width: 100%; border-collapse: collapse; margin: 20px 0; background: white; border-radius: 8px; overflow: hidden;">
+            <tr><td style="padding: 12px; border-bottom: 1px solid #e2e8f0;"><strong>Quote Number:</strong></td><td style="padding: 12px; border-bottom: 1px solid #e2e8f0;">{{quoteNumber}}</td></tr>
+            <tr><td style="padding: 12px;"><strong>Status:</strong></td><td style="padding: 12px;"><strong style="color: #0891b2;">{{newStatus}}</strong></td></tr>
+          </table>
+          <p>If you have any questions, please contact us.</p>
+        </div>
+      </div>
+    `,
+  },
+};
+
+// Replace template placeholders with actual values
+function processTemplate(template: string, context: NotificationContext): string {
+  let result = template;
+
+  // Quote placeholders
+  if (context.quote) {
+    result = result.replace(/\{\{quoteNumber\}\}/g, context.quote.quoteNumber || '');
+    result = result.replace(/\{\{quoteTotal\}\}/g, formatCurrency(context.quote.total));
+    result = result.replace(/\{\{quoteTitle\}\}/g, context.quote.title || 'N/A');
+    result = result.replace(/\{\{quoteStatus\}\}/g, context.quote.status || '');
+    result = result.replace(/\{\{validUntil\}\}/g, context.quote.validUntil ? new Date(context.quote.validUntil).toLocaleDateString('en-US') : 'N/A');
+    result = result.replace(/\{\{customerName\}\}/g, context.quote.customerName || context.customer?.contactName || 'Valued Customer');
+    result = result.replace(/\{\{customerCompany\}\}/g, context.quote.customerCompany || context.customer?.companyName || 'N/A');
+    result = result.replace(/\{\{customerEmail\}\}/g, context.quote.customerEmail || context.customer?.email || '');
+  }
+
+  // Customer placeholders
+  if (context.customer) {
+    result = result.replace(/\{\{customerName\}\}/g, context.customer.contactName || '');
+    result = result.replace(/\{\{customerEmail\}\}/g, context.customer.email || '');
+    result = result.replace(/\{\{customerCompany\}\}/g, context.customer.companyName || '');
+  }
+
+  // User placeholders
+  if (context.user) {
+    result = result.replace(/\{\{userName\}\}/g, context.user.name || '');
+    result = result.replace(/\{\{userEmail\}\}/g, context.user.email || '');
+  }
+
+  // Status change placeholders
+  result = result.replace(/\{\{previousStatus\}\}/g, context.previousStatus || '');
+  result = result.replace(/\{\{newStatus\}\}/g, context.newStatus || '');
+
+  return result;
+}
+
+function formatCurrency(value: string | number): string {
+  const num = typeof value === 'string' ? parseFloat(value) : value;
+  return isNaN(num) ? '$0.00' : `$${num.toFixed(2)}`;
+}
+
+// Get notification setting
+async function getNotificationSetting(type: NotificationType) {
+  if (!isDatabaseEnabled) return null;
+
+  try {
+    const setting = await prisma.notificationSetting.findUnique({
+      where: { type },
+    });
+
+    return setting;
+  } catch (error) {
+    adminLogger.error('Failed to get notification setting', {
+      type,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+// Log notification
+async function logNotification(
+  type: NotificationType,
+  channel: NotificationChannel,
+  recipientEmail: string,
+  subject: string,
+  body: string,
+  status: 'pending' | 'sent' | 'failed',
+  context: NotificationContext,
+  errorMessage?: string
+) {
+  try {
+    await prisma.notificationLog.create({
+      data: {
+        type,
+        channel,
+        recipientEmail,
+        recipientName: context.customer?.contactName || context.quote?.customerName || context.user?.name,
+        subject,
+        body,
+        status,
+        errorMessage,
+        sentAt: status === 'sent' ? new Date() : null,
+        quoteId: context.quote?.id,
+        customerId: context.customer?.id,
+        userId: context.user?.id,
+      },
+    });
+  } catch (error) {
+    adminLogger.error('Failed to log notification', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+// Send a notification
+export async function sendNotification(
+  type: NotificationType,
+  context: NotificationContext,
+  overrideRecipient?: string
+): Promise<{ success: boolean; error?: string }> {
+  if (!isDatabaseEnabled) {
+    return { success: false, error: 'Database not configured' };
+  }
+
+  const setting = await getNotificationSetting(type);
+
+  if (!setting || !setting.enabled) {
+    adminLogger.info('Notification skipped - disabled or not configured', { type });
+    return { success: true }; // Not an error, just disabled
+  }
+
+  const defaultTemplate = DEFAULT_TEMPLATES[type];
+  const subject = processTemplate(setting.subject || defaultTemplate.subject, context);
+  const body = processTemplate(setting.bodyTemplate || defaultTemplate.body, context);
+
+  // Determine recipients
+  let recipients: string[] = [];
+
+  if (overrideRecipient) {
+    recipients = [overrideRecipient];
+  } else if (type.startsWith('INTERNAL_')) {
+    // Internal notifications go to configured recipient emails
+    recipients = setting.recipientEmails || [];
+  } else {
+    // External notifications go to customer email
+    const customerEmail = context.quote?.customerEmail || context.customer?.email;
+    if (customerEmail) {
+      recipients = [customerEmail];
+    }
+  }
+
+  if (recipients.length === 0) {
+    adminLogger.warn('No recipients for notification', { type });
+    return { success: false, error: 'No recipients configured' };
+  }
+
+  // Send to all recipients
+  const results = await Promise.all(
+    recipients.map(async (recipient) => {
+      if (setting.channel === 'EMAIL') {
+        const result = await sendEmail({
+          to: recipient,
+          subject,
+          body,
+          isHtml: true,
+        });
+
+        await logNotification(
+          type,
+          'EMAIL',
+          recipient,
+          subject,
+          body,
+          result.success ? 'sent' : 'failed',
+          context,
+          result.error
+        );
+
+        return result;
+      }
+
+      // SMS support for future
+      return { success: false, error: 'SMS not yet implemented' };
+    })
+  );
+
+  const allSuccessful = results.every((r) => r.success);
+  const errors = results.filter((r) => !r.success).map((r) => r.error);
+
+  return {
+    success: allSuccessful,
+    error: errors.length > 0 ? errors.join(', ') : undefined,
+  };
+}
+
+// Convenience functions for specific notification types
+export async function notifyQuoteCreated(quote: NotificationContext['quote']) {
+  return sendNotification('INTERNAL_QUOTE_CREATED', { quote });
+}
+
+export async function notifyQuoteStatusChange(
+  quote: NotificationContext['quote'],
+  previousStatus: string,
+  newStatus: string,
+  sendToCustomer = true
+) {
+  const context = { quote, previousStatus, newStatus };
+
+  // Send internal notification
+  await sendNotification('INTERNAL_QUOTE_STATUS_CHANGE', context);
+
+  // Send customer notification if enabled and requested
+  if (sendToCustomer && quote?.customerEmail) {
+    await sendNotification('CUSTOMER_QUOTE_STATUS_CHANGE', context);
+  }
+}
+
+export async function notifyQuoteSentToCustomer(quote: NotificationContext['quote']) {
+  if (!quote?.customerEmail) {
+    return { success: false, error: 'No customer email' };
+  }
+
+  return sendNotification('CUSTOMER_QUOTE_SENT', { quote });
+}
+
+export async function notifyUserVerification(user: NotificationContext['user']) {
+  if (!user?.email) {
+    return { success: false, error: 'No user email' };
+  }
+
+  return sendNotification('INTERNAL_USER_VERIFICATION', { user }, user.email);
+}
+
+// Initialize default notification settings
+export async function initializeNotificationSettings() {
+  if (!isDatabaseEnabled) return;
+
+  const defaultSettings = [
+    {
+      type: 'INTERNAL_QUOTE_CREATED' as NotificationType,
+      name: 'Quote Generation (Internal)',
+      description: 'Notify internal users when a new quote is created',
+      channel: 'EMAIL' as NotificationChannel,
+      enabled: false,
+    },
+    {
+      type: 'INTERNAL_QUOTE_STATUS_CHANGE' as NotificationType,
+      name: 'Quote Status Change (Internal)',
+      description: 'Notify internal users when a quote status changes',
+      channel: 'EMAIL' as NotificationChannel,
+      enabled: false,
+    },
+    {
+      type: 'INTERNAL_USER_VERIFICATION' as NotificationType,
+      name: 'User Email Verification',
+      description: 'Send verification emails to new admin users',
+      channel: 'EMAIL' as NotificationChannel,
+      enabled: false,
+    },
+    {
+      type: 'CUSTOMER_QUOTE_SENT' as NotificationType,
+      name: 'Customer Quote Delivery',
+      description: 'Send quotes to customer email addresses',
+      channel: 'EMAIL' as NotificationChannel,
+      enabled: false,
+    },
+    {
+      type: 'CUSTOMER_QUOTE_STATUS_CHANGE' as NotificationType,
+      name: 'Customer Quote Status Update',
+      description: 'Notify customers when their quote status changes',
+      channel: 'EMAIL' as NotificationChannel,
+      enabled: false,
+    },
+  ];
+
+  for (const setting of defaultSettings) {
+    try {
+      await prisma.notificationSetting.upsert({
+        where: { type: setting.type },
+        update: {},
+        create: setting,
+      });
+    } catch (error) {
+      adminLogger.error('Failed to initialize notification setting', {
+        type: setting.type,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+}

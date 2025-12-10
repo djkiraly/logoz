@@ -16,6 +16,10 @@ import {
   EyeOff,
   UserCheck,
   UserX,
+  Mail,
+  MailCheck,
+  MailX,
+  RefreshCw,
 } from 'lucide-react';
 
 type AdminRole = 'SUPER_ADMIN' | 'ADMIN' | 'EDITOR';
@@ -26,6 +30,7 @@ type AdminUser = {
   name: string;
   role: AdminRole;
   isActive: boolean;
+  emailVerified: boolean;
   lastLoginAt: string | null;
   createdAt: string;
   _count?: {
@@ -58,6 +63,7 @@ export default function UsersPage() {
   const [formData, setFormData] = useState(emptyUser);
   const [showPassword, setShowPassword] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [resendingVerification, setResendingVerification] = useState<string | null>(null);
 
   useEffect(() => {
     fetchUsers();
@@ -235,6 +241,37 @@ export default function UsersPage() {
     }
   };
 
+  const handleResendVerification = async (user: AdminUser) => {
+    setResendingVerification(user.id);
+    setMessage(null);
+
+    try {
+      const response = await fetch(`/api/admin/users/${user.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'resend_verification' }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to resend verification email');
+      }
+
+      setMessage({
+        type: 'success',
+        text: `Verification email sent to ${user.email}`,
+      });
+    } catch (error) {
+      setMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : 'Failed to resend verification email',
+      });
+    } finally {
+      setResendingVerification(null);
+    }
+  };
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
@@ -383,17 +420,32 @@ export default function UsersPage() {
                     </span>
                   </td>
                   <td className="p-4">
-                    {user.isActive ? (
-                      <span className="inline-flex items-center gap-1.5 text-green-400">
-                        <UserCheck className="w-4 h-4" />
-                        <span className="text-sm">Active</span>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 text-slate-500">
-                        <UserX className="w-4 h-4" />
-                        <span className="text-sm">Inactive</span>
-                      </span>
-                    )}
+                    <div className="space-y-1">
+                      {user.isActive ? (
+                        <span className="inline-flex items-center gap-1.5 text-green-400">
+                          <UserCheck className="w-4 h-4" />
+                          <span className="text-sm">Active</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 text-slate-500">
+                          <UserX className="w-4 h-4" />
+                          <span className="text-sm">Inactive</span>
+                        </span>
+                      )}
+                      <div>
+                        {user.emailVerified ? (
+                          <span className="inline-flex items-center gap-1.5 text-cyan-400">
+                            <MailCheck className="w-3.5 h-3.5" />
+                            <span className="text-xs">Verified</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 text-amber-400">
+                            <MailX className="w-3.5 h-3.5" />
+                            <span className="text-xs">Unverified</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </td>
                   <td className="p-4">
                     <span className="text-slate-400 text-sm">
@@ -410,6 +462,21 @@ export default function UsersPage() {
                   </td>
                   <td className="p-4">
                     <div className="flex items-center justify-end gap-2">
+                      {/* Resend Verification Button - show for unverified users */}
+                      {!user.emailVerified && canManageUser(user) && (
+                        <button
+                          onClick={() => handleResendVerification(user)}
+                          disabled={resendingVerification === user.id}
+                          className="p-2 text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition-colors disabled:opacity-50"
+                          title="Resend verification email"
+                        >
+                          {resendingVerification === user.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <RefreshCw className="w-4 h-4" />
+                          )}
+                        </button>
+                      )}
                       {canManageUser(user) && (
                         <>
                           <button

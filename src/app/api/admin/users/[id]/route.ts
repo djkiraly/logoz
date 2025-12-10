@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
+import { headers } from 'next/headers';
 import { z } from 'zod';
 import { prisma, isDatabaseEnabled } from '@/lib/prisma';
 import { getCurrentUser, hashPassword, logAuditEvent } from '@/lib/auth';
 import { handleApiError, ApiException } from '@/lib/api-utils';
 import { createRequestLogger } from '@/lib/logger';
 import { getClientIp } from '@/lib/rate-limit';
+import { resendVerificationEmail } from '@/lib/email-verification';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,6 +48,7 @@ export async function GET(request: Request, context: RouteContext) {
         name: true,
         role: true,
         isActive: true,
+        emailVerified: true,
         lastLoginAt: true,
         createdAt: true,
         _count: {
@@ -181,6 +184,7 @@ export async function PUT(request: Request, context: RouteContext) {
         name: true,
         role: true,
         isActive: true,
+        emailVerified: true,
         lastLoginAt: true,
         createdAt: true,
       },
@@ -278,6 +282,67 @@ export async function DELETE(request: Request, context: RouteContext) {
     reqLogger.info('User deleted', { userId: currentUser.id, deletedUserId: id });
 
     return NextResponse.json({ ok: true, message: 'User deleted successfully' });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+// POST /api/admin/users/[id] - Actions (resend verification, etc.)
+export async function POST(request: Request, context: RouteContext) {
+  const reqLogger = createRequestLogger(request);
+
+  try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      throw new ApiException('Unauthorized', 401, 'UNAUTHORIZED');
+    }
+
+    if (!isDatabaseEnabled) {
+      throw new ApiException('Database not configured', 503, 'SERVICE_UNAVAILABLE');
+    }
+
+    const { id } = await context.params;
+    const body = await request.json();
+    const { action } = body;
+
+    // Get target user
+    const targetUser = await prisma.adminUser.findUnique({
+      where: { id },
+    });
+
+    if (!targetUser) {
+      throw new ApiException('User not found', 404, 'NOT_FOUND');
+    }
+
+    // Permission check - only admins can perform actions on users
+    if (currentUser.role === 'EDITOR' && currentUser.id !== id) {
+      throw new ApiException('Insufficient permissions', 403, 'FORBIDDEN');
+    }
+
+    switch (action) {
+      case 'resend_verification': {
+        if (targetUser.emailVerified) {
+          throw new ApiException('Email already verified', 400, 'ALREADY_VERIFIED');
+        }
+
+        const headersList = await headers();
+        const host = headersList.get('host') || 'localhost:3000';
+        const protocol = headersList.get('x-forwarded-proto') || 'http';
+        const baseUrl = `${protocol}://${host}`;
+
+        const result = await resendVerificationEmail(id, baseUrl);
+
+        if (result.success) {
+          reqLogger.info('Verification email resent', { userId: currentUser.id, targetUserId: id });
+          return NextResponse.json({ ok: true, message: 'Verification email sent' });
+        } else {
+          throw new ApiException(result.error || 'Failed to send verification email', 500, 'EMAIL_FAILED');
+        }
+      }
+
+      default:
+        throw new ApiException('Invalid action', 400, 'INVALID_ACTION');
+    }
   } catch (error) {
     return handleApiError(error);
   }
