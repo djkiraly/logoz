@@ -191,6 +191,91 @@ enum QuoteStatus {
 }
 
 // ===========================================
+// CRM & Customers
+// ===========================================
+
+enum CustomerStatus {
+  LEAD
+  PROSPECT
+  ACTIVE
+  INACTIVE
+  CHURNED
+}
+
+enum CustomerType {
+  INDIVIDUAL
+  BUSINESS
+  NONPROFIT
+  GOVERNMENT
+  EDUCATION
+}
+
+model Customer {
+  id              String         @id @default(cuid())
+
+  // Company Information
+  companyName     String?
+  customerType    CustomerType   @default(BUSINESS)
+  website         String?
+  industry        String?
+  employeeCount   String?
+  annualRevenue   String?
+
+  // Primary Contact
+  contactName     String
+  contactTitle    String?
+  email           String         @unique
+  phone           String?
+  mobilePhone     String?
+
+  // Address
+  addressLine1    String?
+  addressLine2    String?
+  city            String?
+  state           String?
+  postalCode      String?
+  country         String?        @default("USA")
+
+  // Shipping Address (if different)
+  shippingAddressLine1  String?
+  shippingAddressLine2  String?
+  shippingCity          String?
+  shippingState         String?
+  shippingPostalCode    String?
+  shippingCountry       String?
+
+  // CRM Fields
+  status          CustomerStatus @default(LEAD)
+  source          String?        // How they found us (referral, web, trade show, etc.)
+  assignedTo      String?        // Sales rep or account manager
+  tags            String[]       // Custom tags for segmentation
+
+  // Financial
+  taxExempt       Boolean        @default(false)
+  taxId           String?        // EIN or tax exempt number
+  paymentTerms    String?        // Net 30, Net 60, etc.
+  creditLimit     Decimal?       @db.Money
+
+  // Communication Preferences
+  preferredContact String?       // email, phone, text
+  marketingOptIn   Boolean       @default(true)
+
+  // Notes & History
+  notes           String?        // General notes about the customer
+
+  // Timestamps
+  lastContactAt   DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([email])
+  @@index([companyName])
+  @@index([status])
+  @@index([customerType])
+  @@index([createdAt(sort: Desc)])
+}
+
+// ===========================================
 // Admin & Authentication
 // ===========================================
 

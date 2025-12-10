@@ -14,6 +14,7 @@ import {
   Shield,
   X,
   Store,
+  Building2,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useState, useEffect } from 'react';
@@ -39,6 +40,7 @@ const navigation: NavItem[] = [
   { name: 'Appearance', href: '/admin/appearance', icon: Palette },
   { name: 'Products', href: '/admin/products', icon: Package },
   { name: 'Vendors', href: '/admin/vendors', icon: Store },
+  { name: 'Customers', href: '/admin/customers', icon: Building2 },
   { name: 'Quotes', href: '/admin/quotes', icon: FileText },
   { name: 'Users', href: '/admin/users', icon: Users },
 ];
