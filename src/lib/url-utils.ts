@@ -1,25 +1,39 @@
 import { headers } from 'next/headers';
 
 /**
+ * Check if a URL is a localhost URL
+ */
+function isLocalhostUrl(url: string): boolean {
+  return url.includes('localhost') || url.includes('127.0.0.1');
+}
+
+/**
  * Get the base URL for the application.
  *
  * Priority:
- * 1. NEXT_PUBLIC_SITE_URL environment variable (recommended for production)
- * 2. Request headers (x-forwarded-proto + host)
- * 3. Fallback to localhost:3000
+ * 1. SITE_URL environment variable (server-side, recommended for production)
+ * 2. NEXT_PUBLIC_SITE_URL environment variable (if not localhost)
+ * 3. Request headers (x-forwarded-proto + host)
+ * 4. Fallback to http://localhost:3000
  *
- * For production deployments, always set NEXT_PUBLIC_SITE_URL to your domain
+ * For production deployments, set SITE_URL (or NEXT_PUBLIC_SITE_URL) to your domain
  * (e.g., https://yourdomain.com) to ensure email links work correctly.
  */
 export async function getBaseUrl(): Promise<string> {
-  // First priority: Use environment variable if set (recommended for production)
+  // First priority: Use SITE_URL (server-side env var)
+  const siteUrl = process.env.SITE_URL;
+  if (siteUrl && !isLocalhostUrl(siteUrl)) {
+    return siteUrl.replace(/\/$/, '');
+  }
+
+  // Second priority: Use NEXT_PUBLIC_SITE_URL
   const envUrl = process.env.NEXT_PUBLIC_SITE_URL;
-  if (envUrl && envUrl !== 'http://localhost:3000') {
+  if (envUrl && !isLocalhostUrl(envUrl)) {
     // Remove trailing slash if present
     return envUrl.replace(/\/$/, '');
   }
 
-  // Second priority: Try to determine from request headers
+  // Third priority: Try to determine from request headers
   try {
     const headersList = await headers();
 
@@ -30,15 +44,9 @@ export async function getBaseUrl(): Promise<string> {
     // Check for protocol
     const forwardedProto = headersList.get('x-forwarded-proto');
 
-    if (host && host !== 'localhost:3000') {
-      // Determine protocol - default to https for production hosts
-      let protocol = forwardedProto || 'https';
-
-      // If host doesn't contain localhost, assume https
-      if (!host.includes('localhost') && !host.includes('127.0.0.1')) {
-        protocol = 'https';
-      }
-
+    if (host && !isLocalhostUrl(host)) {
+      // For non-localhost hosts, default to https
+      const protocol = forwardedProto || 'https';
       return `${protocol}://${host}`;
     }
   } catch {
@@ -51,12 +59,20 @@ export async function getBaseUrl(): Promise<string> {
 
 /**
  * Synchronous version for use in client-side code or when headers aren't available.
- * Only uses the environment variable.
+ * Only uses environment variables.
  */
 export function getBaseUrlSync(): string {
+  // Try SITE_URL first (server-side)
+  const siteUrl = process.env.SITE_URL;
+  if (siteUrl && !isLocalhostUrl(siteUrl)) {
+    return siteUrl.replace(/\/$/, '');
+  }
+
+  // Then try NEXT_PUBLIC_SITE_URL
   const envUrl = process.env.NEXT_PUBLIC_SITE_URL;
-  if (envUrl) {
+  if (envUrl && !isLocalhostUrl(envUrl)) {
     return envUrl.replace(/\/$/, '');
   }
+
   return 'http://localhost:3000';
 }
