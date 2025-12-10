@@ -26,6 +26,11 @@ export function ProductShowcase({ products }: ProductShowcaseProps) {
     return price.toString();
   };
 
+  // Don't render the section if there are no products
+  if (!products || products.length === 0) {
+    return null;
+  }
+
   return (
     <section className="px-4 py-12">
       <div className="mx-auto max-w-6xl space-y-6">

@@ -99,9 +99,13 @@ export const getProducts = cache(async () =>
   loadOrFallback(
     () =>
       prisma.product.findMany({
+        where: { visible: true },
         include: { category: true, supplier: true },
         take: 12,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [
+          { featured: 'desc' },
+          { createdAt: 'desc' },
+        ],
       }),
     fallback.products,
   ),

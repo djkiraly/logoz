@@ -76,11 +76,14 @@ model Product {
   variants     Variant[]
   designs      Design[]
   collections  Collection[]        @relation("CollectionProducts")
+  visible      Boolean             @default(false)
+  featured     Boolean             @default(false)
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
 
   @@index([categoryId])
   @@index([supplierId])
+  @@index([visible])
   @@index([createdAt(sort: Desc)])
 }
 
