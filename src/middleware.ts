@@ -10,10 +10,18 @@ export function middleware(request: NextRequest) {
   if (pathname.startsWith('/admin')) {
     const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
 
-    // Allow access to login page without session
-    if (pathname === '/admin/login') {
-      // If already authenticated, redirect to dashboard
-      if (sessionToken) {
+    // Public admin routes that don't require authentication
+    const publicAdminRoutes = [
+      '/admin/login',
+      '/admin/forgot-password',
+      '/admin/reset-password',
+    ];
+
+    const isPublicRoute = publicAdminRoutes.some(route => pathname === route || pathname.startsWith(route + '/'));
+
+    if (isPublicRoute) {
+      // If already authenticated and trying to access login, redirect to dashboard
+      if (sessionToken && pathname === '/admin/login') {
         return NextResponse.redirect(new URL('/admin', request.url));
       }
       return NextResponse.next();

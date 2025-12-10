@@ -44,7 +44,8 @@
       "Bash(git -C \"D:/Projects/Logoz\" log -1 --stat)",
       "Bash(git -C \"D:/Projects/Logoz\" fetch origin)",
       "Bash(npx next build)",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(npm ls:*)"
     ],
     "deny": [],
     "ask": []

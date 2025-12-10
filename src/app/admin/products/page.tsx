@@ -182,10 +182,44 @@ export default function ProductsPage() {
         body: formDataUpload,
       });
 
-      const data = await response.json();
+      let data;
+      try {
+        data = await response.json();
+        console.log('Upload response data:', data);
+        console.log('Upload response data type:', typeof data);
+        console.log('Upload response data stringified:', JSON.stringify(data));
+      } catch (parseError) {
+        console.error('Failed to parse response:', parseError);
+        throw new Error(`Upload failed with status ${response.status}`);
+      }
 
       if (!response.ok) {
-        throw new Error(data.error || 'Upload failed');
+        // Log everything for debugging
+        console.error('Upload failed - full data:', data);
+        console.error('data.error:', data.error, 'type:', typeof data.error);
+        console.error('data.details:', data.details, 'type:', typeof data.details);
+
+        // Handle error - could be string or object
+        let errorMsg = 'Upload failed';
+        if (typeof data === 'string') {
+          errorMsg = data;
+        } else if (typeof data.error === 'string') {
+          errorMsg = data.error;
+        } else if (typeof data.details === 'string') {
+          errorMsg = data.details;
+        } else if (data.error?.message) {
+          errorMsg = data.error.message;
+        } else if (data.details?.message) {
+          errorMsg = data.details.message;
+        } else {
+          // Stringify the entire response
+          try {
+            errorMsg = `Upload failed: ${JSON.stringify(data)}`;
+          } catch {
+            errorMsg = 'Upload failed - unable to parse error';
+          }
+        }
+        throw new Error(errorMsg);
       }
 
       if (isGallery) {
@@ -202,6 +236,7 @@ export default function ProductsPage() {
 
       setMessage({ type: 'success', text: 'Image uploaded successfully!' });
     } catch (error) {
+      console.error('Upload error:', error);
       setMessage({
         type: 'error',
         text: error instanceof Error ? error.message : 'Upload failed',

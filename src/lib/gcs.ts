@@ -23,6 +23,7 @@ export type UploadOptions = {
 export type UploadResult = {
   url: string;
   publicUrl: string;
+  proxyUrl: string;
   fileName: string;
   size: number;
   contentType: string;
@@ -240,6 +241,12 @@ export function validateFileSize(size: number, contentType: string): boolean {
 
 /**
  * Upload a file to Google Cloud Storage
+ *
+ * Note: If your bucket has "Uniform bucket-level access" enabled,
+ * you cannot set individual object ACLs. Instead, configure bucket-level
+ * permissions to make objects publicly readable if needed.
+ *
+ * If the bucket has public access prevention enabled, signed URLs will be used.
  */
 export async function uploadFile(
   buffer: Buffer,
@@ -260,40 +267,32 @@ export async function uploadFile(
 
   const contentType = options.contentType || 'application/octet-stream';
 
+  // Don't set 'public' option - rely on bucket-level access control instead
+  // This supports buckets with Uniform bucket-level access enabled
   await file.save(buffer, {
     contentType,
     metadata: {
       cacheControl: 'public, max-age=31536000',
       ...options.metadata,
     },
-    public: options.public ?? false,
   });
 
-  let publicUrl: string;
-  let url: string;
+  // Generate URLs
+  const publicUrl = `https://storage.googleapis.com/${config.bucketName}/${fileName}`;
 
-  if (options.public) {
-    publicUrl = `https://storage.googleapis.com/${config.bucketName}/${fileName}`;
-    url = publicUrl;
-  } else {
-    const [signedUrl] = await file.getSignedUrl({
-      action: 'read',
-      expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
-    });
-    url = signedUrl;
-    publicUrl = `https://storage.googleapis.com/${config.bucketName}/${fileName}`;
-  }
+  // Proxy URL - serves images through our API (works with private buckets)
+  const proxyUrl = `/api/images/${fileName}`;
 
   adminLogger.info('File uploaded to GCS', {
     fileName,
     size: buffer.length,
     contentType,
-    public: options.public,
   });
 
   return {
-    url,
+    url: proxyUrl, // Use proxy URL as the default URL
     publicUrl,
+    proxyUrl,
     fileName,
     size: buffer.length,
     contentType,
