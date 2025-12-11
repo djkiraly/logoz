@@ -31,6 +31,11 @@ model SiteSetting {
   announcement String?
   theme        Json?
   gcsConfig    Json?
+
+  // reCAPTCHA Configuration
+  recaptchaEnabled   Boolean @default(false)
+  recaptchaSiteKey   String?
+  recaptchaSecretKey String?
 }
 
 model Category {
@@ -81,6 +86,7 @@ model Product {
   designs      Design[]
   collections  Collection[]        @relation("CollectionProducts")
   quoteLineItems QuoteLineItem[]
+  productViews ProductView[]
   visible      Boolean             @default(false)
   featured     Boolean             @default(false)
   createdAt    DateTime            @default(now())
@@ -192,6 +198,7 @@ enum QuoteStatus {
   REVIEWING
   SENT
   APPROVED
+  DECLINED
   ARCHIVED
 }
 
@@ -224,7 +231,8 @@ model Quote {
 
   // Pricing
   subtotal        Decimal         @default(0) @db.Money
-  discount        Decimal         @default(0) @db.Money
+  discountValue   Decimal         @default(0)  // User's input value (percentage or fixed amount)
+  discount        Decimal         @default(0) @db.Money  // Calculated discount amount
   discountType    DiscountType    @default(FIXED)
   tax             Decimal         @default(0) @db.Money
   taxRate         Decimal         @default(0)
@@ -235,19 +243,33 @@ model Quote {
   status          QuoteStatus     @default(PENDING)
   sentAt          DateTime?
   approvedAt      DateTime?
+  declinedAt      DateTime?
+
+  // Public access token for customer viewing/approval
+  accessToken     String?         @unique
 
   // Line items
   lineItems       QuoteLineItem[]
+
+  // Audit trail
+  auditLogs       QuoteAuditLog[]
+
+  // Quote Owner (internal resource responsible for the quote)
+  owner           AdminUser?      @relation("QuoteOwner", fields: [ownerId], references: [id])
+  ownerId         String?
 
   // Metadata
   createdBy       String?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
+  lastModifiedAt  DateTime        @default(now())
 
   @@index([customerId])
   @@index([status])
   @@index([quoteNumber])
+  @@index([ownerId])
   @@index([createdAt(sort: Desc)])
+  @@index([lastModifiedAt(sort: Desc)])
 }
 
 model QuoteLineItem {
@@ -304,6 +326,59 @@ enum LineItemType {
 enum DiscountType {
   FIXED
   PERCENTAGE
+}
+
+// ===========================================
+// Quote Audit Trail
+// ===========================================
+
+model QuoteAuditLog {
+  id            String              @id @default(cuid())
+  quote         Quote               @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  quoteId       String
+
+  // What happened
+  action        QuoteAuditAction
+  description   String              // Human-readable description
+
+  // Who made the change
+  actorType     QuoteAuditActorType @default(ADMIN)
+  actorId       String?             // AdminUser ID if admin, null if system/customer
+  actorName     String?             // Name for display (cached)
+  actorEmail    String?             // Email for display (cached)
+
+  // Change details (JSON for flexibility)
+  previousValue Json?               // Previous state/values
+  newValue      Json?               // New state/values
+  metadata      Json?               // Additional context
+
+  createdAt     DateTime            @default(now())
+
+  @@index([quoteId])
+  @@index([createdAt(sort: Desc)])
+  @@index([action])
+}
+
+enum QuoteAuditAction {
+  CREATED
+  UPDATED
+  STATUS_CHANGED
+  SENT_TO_CUSTOMER
+  APPROVED_BY_CUSTOMER
+  DECLINED_BY_CUSTOMER
+  LINE_ITEM_ADDED
+  LINE_ITEM_UPDATED
+  LINE_ITEM_REMOVED
+  CUSTOMER_CHANGED
+  OWNER_CHANGED
+  PRICING_UPDATED
+  DELETED
+}
+
+enum QuoteAuditActorType {
+  ADMIN
+  CUSTOMER
+  SYSTEM
 }
 
 // ===========================================
@@ -418,6 +493,7 @@ model AdminUser {
   lastLoginAt  DateTime?
   sessions     AdminSession[]
   auditLogs    AuditLog[]
+  ownedQuotes  Quote[]        @relation("QuoteOwner")
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
@@ -460,17 +536,212 @@ model AuditLog {
 }
 
 model PageView {
-  id        String   @id @default(cuid())
-  path      String
-  referrer  String?
-  userAgent String?
-  ipAddress String?
-  sessionId String?
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  path        String
+  referrer    String?
+  userAgent   String?
+  ipAddress   String?
+  sessionId   String?
+  // Enhanced tracking
+  duration    Int?     // Time spent on page in seconds
+  scrollDepth Int?     // Max scroll depth percentage (0-100)
+  exitPage    Boolean  @default(false)
+  isAdmin     Boolean  @default(false) // true for admin panel views, false for public site
+  // Geographic data (populated from IP)
+  country     String?
+  region      String?
+  city        String?
+  // Device info (parsed from user agent)
+  deviceType  String?  // desktop, mobile, tablet
+  browser     String?
+  os          String?
+  createdAt   DateTime @default(now())
 
   @@index([path])
   @@index([createdAt(sort: Desc)])
   @@index([sessionId])
+  @@index([country])
+  @@index([deviceType])
+  @@index([isAdmin])
+}
+
+// ===========================================
+// Analytics: Session Tracking
+// ===========================================
+
+model AnalyticsSession {
+  id              String    @id @default(cuid())
+  sessionId       String    @unique
+  // First touch attribution
+  firstPage       String
+  landingPage     String
+  referrer        String?
+  utmSource       String?
+  utmMedium       String?
+  utmCampaign     String?
+  // Session metrics
+  pageCount       Int       @default(1)
+  totalDuration   Int       @default(0)  // Total time in seconds
+  // Geographic data
+  country         String?
+  region          String?
+  city            String?
+  // Device info
+  deviceType      String?
+  browser         String?
+  os              String?
+  ipAddress       String?
+  // Timestamps
+  startedAt       DateTime  @default(now())
+  lastActiveAt    DateTime  @default(now())
+  endedAt         DateTime?
+  // Conversion tracking
+  convertedToQuote Boolean  @default(false)
+  quoteId          String?
+
+  @@index([sessionId])
+  @@index([startedAt(sort: Desc)])
+  @@index([country])
+  @@index([deviceType])
+  @@index([convertedToQuote])
+  @@index([utmSource])
+}
+
+// ===========================================
+// Analytics: Product Views
+// ===========================================
+
+model ProductView {
+  id          String   @id @default(cuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sessionId   String?
+  ipAddress   String?
+  referrer    String?
+  duration    Int?     // Time spent viewing in seconds
+  addedToQuote Boolean @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([productId])
+  @@index([sessionId])
+  @@index([createdAt(sort: Desc)])
+}
+
+// ===========================================
+// Analytics: Quote Funnel Events
+// ===========================================
+
+enum QuoteFunnelStage {
+  VIEWED_PRODUCTS
+  STARTED_QUOTE
+  ADDED_ITEMS
+  SUBMITTED_INFO
+  QUOTE_SENT
+  QUOTE_APPROVED
+  QUOTE_REJECTED
+}
+
+model QuoteFunnelEvent {
+  id          String           @id @default(cuid())
+  stage       QuoteFunnelStage
+  sessionId   String?
+  quoteId     String?
+  customerId  String?
+  // Metadata
+  productIds  String[]
+  metadata    Json?
+  // Timestamps
+  createdAt   DateTime         @default(now())
+
+  @@index([stage])
+  @@index([sessionId])
+  @@index([quoteId])
+  @@index([createdAt(sort: Desc)])
+}
+
+// ===========================================
+// Analytics: Daily Aggregates (for fast queries)
+// ===========================================
+
+model DailyAnalytics {
+  id              String   @id @default(cuid())
+  date            DateTime @db.Date
+  // Traffic metrics
+  pageViews       Int      @default(0)
+  uniqueVisitors  Int      @default(0)
+  newVisitors     Int      @default(0)
+  returningVisitors Int    @default(0)
+  // Engagement metrics
+  avgSessionDuration Int   @default(0)  // In seconds
+  avgPageViews    Decimal  @default(0)
+  bounceRate      Decimal  @default(0)  // Percentage
+  // Conversion metrics
+  quotesStarted   Int      @default(0)
+  quotesSubmitted Int      @default(0)
+  quotesApproved  Int      @default(0)
+  conversionRate  Decimal  @default(0)
+  // Product metrics
+  productViews    Int      @default(0)
+  topProducts     Json?    // Array of {productId, views}
+  // Geographic breakdown
+  topCountries    Json?    // Array of {country, count}
+  // Device breakdown
+  desktopVisits   Int      @default(0)
+  mobileVisits    Int      @default(0)
+  tabletVisits    Int      @default(0)
+  // Revenue (if quotes approved)
+  quotesValue     Decimal  @default(0) @db.Money
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([date])
+  @@index([date(sort: Desc)])
+}
+
+// ===========================================
+// Analytics: Entity Activity Tracking
+// ===========================================
+
+enum EntityType {
+  PRODUCT
+  VENDOR
+  QUOTE
+  CUSTOMER
+  CATEGORY
+  USER
+}
+
+enum ActivityType {
+  CREATED
+  UPDATED
+  DELETED
+  VIEWED
+  PUBLISHED
+  UNPUBLISHED
+  STATUS_CHANGED
+}
+
+model EntityActivity {
+  id          String       @id @default(cuid())
+  entityType  EntityType
+  entityId    String
+  activityType ActivityType
+  // Actor info
+  userId      String?
+  sessionId   String?
+  ipAddress   String?
+  // Change details
+  oldValue    Json?
+  newValue    Json?
+  metadata    Json?
+  createdAt   DateTime     @default(now())
+
+  @@index([entityType])
+  @@index([entityId])
+  @@index([activityType])
+  @@index([createdAt(sort: Desc)])
+  @@index([userId])
 }
 
 enum AdminRole {

@@ -3,6 +3,7 @@ import { getCurrentUser } from '@/lib/auth';
 import { prisma, isDatabaseEnabled } from '@/lib/prisma';
 import { adminLogger } from '@/lib/logger';
 import { Prisma } from '@prisma/client';
+import { trackEntityActivity } from '@/lib/analytics';
 
 // GET /api/admin/products - List all products
 export async function GET() {
@@ -127,6 +128,15 @@ export async function POST(request: NextRequest) {
       userId: user.id,
       productId: product.id,
       sku: product.sku,
+    });
+
+    // Track entity activity
+    await trackEntityActivity({
+      entityType: 'PRODUCT',
+      entityId: product.id,
+      activityType: 'CREATED',
+      userId: user.id,
+      newValue: { sku: product.sku, name: product.name },
     });
 
     return NextResponse.json({ ok: true, data: product }, { status: 201 });

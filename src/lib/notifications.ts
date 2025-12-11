@@ -35,6 +35,11 @@ type NotificationContext = {
     name: string;
     email: string;
   };
+  owner?: {
+    id: string;
+    name: string;
+    email: string;
+  };
   previousStatus?: string;
   newStatus?: string;
 };
@@ -340,6 +345,122 @@ export async function notifyUserVerification(user: NotificationContext['user']) 
   }
 
   return sendNotification('INTERNAL_USER_VERIFICATION', { user }, user.email);
+}
+
+// Notify quote owner when customer approves/declines
+export async function notifyQuoteOwnerStatusChange(
+  quote: NotificationContext['quote'],
+  owner: NotificationContext['owner'],
+  previousStatus: string,
+  newStatus: string
+): Promise<{ success: boolean; error?: string }> {
+  if (!owner?.email) {
+    adminLogger.info('No owner email for quote notification', { quoteId: quote?.id });
+    return { success: true }; // Not an error, just no owner assigned
+  }
+
+  if (!isDatabaseEnabled) {
+    return { success: false, error: 'Database not configured' };
+  }
+
+  const isApproved = newStatus === 'APPROVED';
+  const statusColor = isApproved ? '#16a34a' : '#dc2626';
+  const statusLabel = isApproved ? 'Approved' : 'Declined';
+  const emoji = isApproved ? '✅' : '❌';
+
+  const subject = `${emoji} Quote ${quote?.quoteNumber} ${statusLabel} by Customer`;
+
+  const body = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f8fafc; padding: 20px;">
+      <div style="background: linear-gradient(135deg, #0891b2 0%, #0e7490 100%); padding: 24px 32px; border-radius: 12px 12px 0 0;">
+        <h1 style="margin: 0; color: #ffffff; font-size: 20px; font-weight: 600;">Quote Status Update</h1>
+      </div>
+
+      <div style="background: #ffffff; padding: 32px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+        <p style="margin: 0 0 20px 0; color: #1e293b; font-size: 16px;">Hi ${owner.name},</p>
+
+        <p style="margin: 0 0 24px 0; color: #475569; font-size: 15px; line-height: 1.6;">
+          ${isApproved
+            ? 'Great news! Your customer has approved the quote.'
+            : 'Your customer has declined the quote.'}
+        </p>
+
+        <div style="background: ${isApproved ? '#f0fdf4' : '#fef2f2'}; border: 1px solid ${isApproved ? '#bbf7d0' : '#fecaca'}; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
+          <div style="display: flex; align-items: center; margin-bottom: 12px;">
+            <span style="font-size: 24px; margin-right: 12px;">${emoji}</span>
+            <span style="color: ${statusColor}; font-size: 18px; font-weight: 700;">${statusLabel}</span>
+          </div>
+          <table style="width: 100%; font-size: 14px;">
+            <tr>
+              <td style="padding: 6px 0; color: #64748b;">Quote Number:</td>
+              <td style="padding: 6px 0; color: #1e293b; font-weight: 500;">${quote?.quoteNumber}</td>
+            </tr>
+            ${quote?.title ? `
+            <tr>
+              <td style="padding: 6px 0; color: #64748b;">Title:</td>
+              <td style="padding: 6px 0; color: #1e293b; font-weight: 500;">${quote.title}</td>
+            </tr>
+            ` : ''}
+            <tr>
+              <td style="padding: 6px 0; color: #64748b;">Customer:</td>
+              <td style="padding: 6px 0; color: #1e293b; font-weight: 500;">${quote?.customerName || 'N/A'}${quote?.customerCompany ? ` (${quote.customerCompany})` : ''}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; color: #64748b;">Total:</td>
+              <td style="padding: 6px 0; color: #0891b2; font-weight: 700; font-size: 16px;">${formatCurrency(quote?.total || 0)}</td>
+            </tr>
+          </table>
+        </div>
+
+        <p style="margin: 0; color: #64748b; font-size: 14px;">
+          ${isApproved
+            ? 'You can now proceed with the order. Log in to the admin dashboard to view details and take next steps.'
+            : 'You may want to follow up with the customer to discuss any concerns or alternative options.'}
+        </p>
+      </div>
+
+      <p style="margin: 24px 0 0 0; color: #94a3b8; font-size: 12px; text-align: center;">
+        This notification was sent because you are the owner of this quote.
+      </p>
+    </div>
+  `.trim();
+
+  try {
+    const result = await sendEmail({
+      to: owner.email,
+      subject,
+      body,
+      isHtml: true,
+    });
+
+    await logNotification(
+      'INTERNAL_QUOTE_STATUS_CHANGE',
+      'EMAIL',
+      owner.email,
+      subject,
+      body,
+      result.success ? 'sent' : 'failed',
+      { quote, owner, previousStatus, newStatus },
+      result.error
+    );
+
+    if (result.success) {
+      adminLogger.info('Quote owner notified of status change', {
+        quoteId: quote?.id,
+        ownerId: owner.id,
+        newStatus,
+      });
+    }
+
+    return result;
+  } catch (error) {
+    adminLogger.error('Failed to notify quote owner', {
+      quoteId: quote?.id,
+      ownerId: owner.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
 }
 
 // Initialize default notification settings

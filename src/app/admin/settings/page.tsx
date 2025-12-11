@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Save, Loader2, AlertCircle, CheckCircle, Cloud, Eye, EyeOff, TestTube, Upload } from 'lucide-react';
+import { Save, Loader2, AlertCircle, CheckCircle, Cloud, Eye, EyeOff, TestTube, Upload, Shield } from 'lucide-react';
 
 type SiteSettings = {
   siteName: string;
@@ -23,12 +23,24 @@ type GcsConfig = {
   enabled: boolean;
 };
 
+type RecaptchaConfig = {
+  enabled: boolean;
+  siteKey: string;
+  secretKey: string;
+};
+
 const emptyGcsConfig: GcsConfig = {
   projectId: '',
   bucketName: '',
   clientEmail: '',
   privateKey: '',
   enabled: false,
+};
+
+const emptyRecaptchaConfig: RecaptchaConfig = {
+  enabled: false,
+  siteKey: '',
+  secretKey: '',
 };
 
 export default function SettingsPage() {
@@ -44,7 +56,9 @@ export default function SettingsPage() {
     announcement: '',
   });
   const [gcsConfig, setGcsConfig] = useState<GcsConfig>(emptyGcsConfig);
+  const [recaptchaConfig, setRecaptchaConfig] = useState<RecaptchaConfig>(emptyRecaptchaConfig);
   const [showPrivateKey, setShowPrivateKey] = useState(false);
+  const [showRecaptchaSecretKey, setShowRecaptchaSecretKey] = useState(false);
   const [isTestingGcs, setIsTestingGcs] = useState(false);
   const [gcsTestResult, setGcsTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -83,6 +97,12 @@ export default function SettingsPage() {
             enabled: data.data.gcsConfig.enabled || false,
           });
         }
+        // Load reCAPTCHA config
+        setRecaptchaConfig({
+          enabled: data.data.recaptchaEnabled || false,
+          siteKey: data.data.recaptchaSiteKey || '',
+          secretKey: data.data.recaptchaSecretKey || '',
+        });
       }
     } catch (error) {
       console.error('Failed to fetch settings:', error);
@@ -102,6 +122,9 @@ export default function SettingsPage() {
         body: JSON.stringify({
           ...settings,
           gcsConfig: gcsConfig.projectId ? gcsConfig : null,
+          recaptchaEnabled: recaptchaConfig.enabled,
+          recaptchaSiteKey: recaptchaConfig.siteKey || null,
+          recaptchaSecretKey: recaptchaConfig.secretKey || null,
         }),
       });
 
@@ -162,6 +185,15 @@ export default function SettingsPage() {
 
   const handleGcsToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
     setGcsConfig((prev) => ({ ...prev, enabled: e.target.checked }));
+  };
+
+  const handleRecaptchaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setRecaptchaConfig((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleRecaptchaToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setRecaptchaConfig((prev) => ({ ...prev, enabled: e.target.checked }));
   };
 
   const handleJsonFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -596,6 +628,111 @@ export default function SettingsPage() {
               <li>Create a service account with Storage Admin role</li>
               <li>Generate a JSON key for the service account</li>
               <li>Copy the project ID, bucket name, client email, and private key here</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+
+      {/* Google reCAPTCHA */}
+      <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl">
+        <div className="p-5 border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
+              <Shield className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-white">Google reCAPTCHA</h2>
+              <p className="text-sm text-slate-400">Protect forms from bots and spam</p>
+            </div>
+          </div>
+        </div>
+        <div className="p-5 space-y-5">
+          {/* Enable Toggle */}
+          <div className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-lg">
+            <div>
+              <p className="text-sm font-medium text-slate-300">Enable reCAPTCHA</p>
+              <p className="text-xs text-slate-500">
+                When enabled, reCAPTCHA will be required on the admin login page
+              </p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={recaptchaConfig.enabled}
+                onChange={handleRecaptchaToggle}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-cyan-500/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
+            </label>
+          </div>
+
+          {/* Warning when enabled without keys */}
+          {recaptchaConfig.enabled && (!recaptchaConfig.siteKey || !recaptchaConfig.secretKey) && (
+            <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-amber-400">Configuration Required</p>
+                <p className="text-xs text-amber-400/80 mt-1">
+                  Please enter both Site Key and Secret Key for reCAPTCHA to work properly.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* reCAPTCHA Keys */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Site Key
+            </label>
+            <input
+              type="text"
+              name="siteKey"
+              value={recaptchaConfig.siteKey}
+              onChange={handleRecaptchaChange}
+              className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+              placeholder="6Lc..."
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              The public key used in your frontend
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Secret Key
+            </label>
+            <div className="relative">
+              <input
+                type={showRecaptchaSecretKey ? 'text' : 'password'}
+                name="secretKey"
+                value={recaptchaConfig.secretKey}
+                onChange={handleRecaptchaChange}
+                className="w-full px-4 py-2 pr-12 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                placeholder="6Lc..."
+              />
+              <button
+                type="button"
+                onClick={() => setShowRecaptchaSecretKey(!showRecaptchaSecretKey)}
+                className="absolute top-1/2 -translate-y-1/2 right-3 p-1 text-slate-400 hover:text-white transition-colors"
+                title={showRecaptchaSecretKey ? 'Hide secret key' : 'Show secret key'}
+              >
+                {showRecaptchaSecretKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              The private key used for server-side verification (never exposed to clients)
+            </p>
+          </div>
+
+          {/* Help Text */}
+          <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+            <h4 className="text-sm font-medium text-blue-400 mb-2">Setup Instructions</h4>
+            <ol className="text-xs text-slate-400 space-y-1 list-decimal list-inside">
+              <li>Go to the <a href="https://www.google.com/recaptcha/admin" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">Google reCAPTCHA Admin Console</a></li>
+              <li>Register a new site with reCAPTCHA v2 (&quot;I&apos;m not a robot&quot; checkbox)</li>
+              <li>Add your domain(s) to the allowed domains list</li>
+              <li>Copy the Site Key and Secret Key provided</li>
+              <li>Paste the keys above and enable reCAPTCHA</li>
             </ol>
           </div>
         </div>

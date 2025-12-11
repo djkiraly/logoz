@@ -3,6 +3,8 @@ import { getCurrentUser } from '@/lib/auth';
 import { prisma, isDatabaseEnabled } from '@/lib/prisma';
 import { adminLogger } from '@/lib/logger';
 import { Prisma } from '@prisma/client';
+import { trackEntityActivity, trackQuoteFunnelEvent } from '@/lib/analytics';
+import { logQuoteCreated } from '@/lib/quote-audit';
 
 // Generate a unique quote number
 async function generateQuoteNumber(): Promise<string> {
@@ -46,6 +48,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
     const customerId = searchParams.get('customerId');
+    const ownerId = searchParams.get('ownerId');
     const search = searchParams.get('search');
 
     // Build where clause
@@ -59,6 +62,10 @@ export async function GET(request: NextRequest) {
       where.customerId = customerId;
     }
 
+    if (ownerId) {
+      where.ownerId = ownerId;
+    }
+
     if (search) {
       where.OR = [
         { quoteNumber: { contains: search, mode: 'insensitive' } },
@@ -68,6 +75,7 @@ export async function GET(request: NextRequest) {
         { title: { contains: search, mode: 'insensitive' } },
         { customer: { companyName: { contains: search, mode: 'insensitive' } } },
         { customer: { contactName: { contains: search, mode: 'insensitive' } } },
+        { owner: { name: { contains: search, mode: 'insensitive' } } },
       ];
     }
 
@@ -79,6 +87,13 @@ export async function GET(request: NextRequest) {
             id: true,
             companyName: true,
             contactName: true,
+            email: true,
+          },
+        },
+        owner: {
+          select: {
+            id: true,
+            name: true,
             email: true,
           },
         },
@@ -145,6 +160,7 @@ export async function POST(request: NextRequest) {
       shipping,
       lineItems,
       createCustomer, // Flag to auto-create customer from manual entry
+      ownerId, // Internal resource responsible for the quote
     } = body;
 
     // Validate - need either customerId or customer info
@@ -260,12 +276,14 @@ export async function POST(request: NextRequest) {
         validUntil: validUntil ? new Date(validUntil) : null,
         requestedDelivery: requestedDelivery ? new Date(requestedDelivery) : null,
         subtotal,
+        discountValue: new Prisma.Decimal(discount || 0),
         discount: discountAmount,
         discountType: discountType || 'FIXED',
         tax: taxAmount,
         taxRate: new Prisma.Decimal(taxRate || 0),
         shipping: shippingAmount,
         total,
+        ownerId: ownerId || user.id, // Default to current user if not specified
         createdBy: user.id,
         lineItems: {
           create: processedLineItems,
@@ -273,6 +291,13 @@ export async function POST(request: NextRequest) {
       },
       include: {
         customer: true,
+        owner: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
         lineItems: {
           include: {
             product: true,
@@ -289,6 +314,37 @@ export async function POST(request: NextRequest) {
       userId: user.id,
       quoteId: quote.id,
       quoteNumber: quote.quoteNumber,
+    });
+
+    // Log audit trail
+    await logQuoteCreated(
+      quote.id,
+      quote.quoteNumber,
+      { id: user.id, name: user.name, email: user.email },
+      {
+        quoteNumber: quote.quoteNumber,
+        customerName: quote.customerName || quote.customer?.contactName,
+        customerEmail: quote.customerEmail || quote.customer?.email,
+        total: quote.total.toString(),
+        lineItemCount: quote.lineItems.length,
+      }
+    );
+
+    // Track entity activity
+    await trackEntityActivity({
+      entityType: 'QUOTE',
+      entityId: quote.id,
+      activityType: 'CREATED',
+      userId: user.id,
+      newValue: { quoteNumber: quote.quoteNumber, total: quote.total.toString() },
+    });
+
+    // Track funnel event
+    await trackQuoteFunnelEvent({
+      stage: 'STARTED_QUOTE',
+      quoteId: quote.id,
+      customerId: quote.customerId || undefined,
+      productIds: quote.lineItems.map(li => li.productId).filter(Boolean) as string[],
     });
 
     return NextResponse.json({ ok: true, data: quote }, { status: 201 });

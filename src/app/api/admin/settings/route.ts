@@ -26,6 +26,10 @@ const settingsSchema = z.object({
   address: z.string().max(500).optional().or(z.literal('')),
   announcement: z.string().max(200).optional().or(z.literal('')),
   gcsConfig: gcsConfigSchema,
+  // reCAPTCHA settings
+  recaptchaEnabled: z.boolean().optional(),
+  recaptchaSiteKey: z.string().max(100).optional().or(z.literal('')).nullable(),
+  recaptchaSecretKey: z.string().max(100).optional().or(z.literal('')).nullable(),
 });
 
 // GET: Load all settings
@@ -124,6 +128,25 @@ export async function PUT(request: Request) {
     } catch {
       // gcsConfig field may not exist in schema yet
       console.log('[Settings API] gcsConfig field not available in schema');
+    }
+
+    // Add reCAPTCHA settings
+    if (data.recaptchaEnabled !== undefined) {
+      settingsData.recaptchaEnabled = data.recaptchaEnabled;
+    } else if (existingSettings) {
+      settingsData.recaptchaEnabled = existingSettings.recaptchaEnabled ?? false;
+    }
+
+    if (data.recaptchaSiteKey !== undefined) {
+      settingsData.recaptchaSiteKey = data.recaptchaSiteKey || null;
+    } else if (existingSettings) {
+      settingsData.recaptchaSiteKey = existingSettings.recaptchaSiteKey;
+    }
+
+    if (data.recaptchaSecretKey !== undefined) {
+      settingsData.recaptchaSecretKey = data.recaptchaSecretKey || null;
+    } else if (existingSettings) {
+      settingsData.recaptchaSecretKey = existingSettings.recaptchaSecretKey;
     }
 
     console.log('[Settings API] Upserting with data keys:', Object.keys(settingsData));

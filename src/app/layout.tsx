@@ -1,10 +1,12 @@
 import type { Metadata } from 'next';
 import { Space_Grotesk } from 'next/font/google';
+import { Suspense } from 'react';
 import './globals.css';
 import { SiteHeader } from '@/components/layout/site-header';
 import { SiteFooter } from '@/components/layout/site-footer';
 import { Providers } from '@/components/providers';
 import { getSiteSettings } from '@/lib/site-data';
+import { PageTracker } from '@/components/analytics/page-tracker';
 
 const display = Space_Grotesk({
   subsets: ['latin'],
@@ -49,6 +51,9 @@ export default async function RootLayout({
     <html lang="en">
       <body className={`${display.variable} antialiased`}>
         <Providers>
+          <Suspense fallback={null}>
+            <PageTracker />
+          </Suspense>
           <div className="flex min-h-screen flex-col bg-[#05060a]">
             <SiteHeader settings={settings} />
             <main className="flex-1">{children}</main>

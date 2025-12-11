@@ -14,10 +14,12 @@ export default async function ProductsPage() {
     featured: cat.featured,
   }));
 
-  // Transform products to include categoryId for filtering
+  // Transform products to include categoryId for filtering and convert Decimal to number
   const productsWithCategoryId = products.map((product) => ({
     ...product,
     categoryId: product.categoryId || product.category?.id,
+    basePrice: product.basePrice ? Number(product.basePrice) : 0,
+    cost: product.cost ? Number(product.cost) : null,
   }));
 
   return (

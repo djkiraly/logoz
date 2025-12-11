@@ -24,8 +24,8 @@ async function getStats() {
 
   const [quotesTotal, quotesPending, productsTotal, suppliersTotal, pageViewsToday] =
     await Promise.all([
-      prisma.quoteRequest.count(),
-      prisma.quoteRequest.count({ where: { status: 'PENDING' } }),
+      prisma.quote.count(),
+      prisma.quote.count({ where: { status: 'PENDING' } }),
       prisma.product.count(),
       prisma.supplier.count(),
       prisma.pageView.count({
@@ -50,9 +50,25 @@ async function getRecentQuotes() {
     return [];
   }
 
-  return prisma.quoteRequest.findMany({
-    orderBy: { createdAt: 'desc' },
+  return prisma.quote.findMany({
+    orderBy: { lastModifiedAt: 'desc' },
     take: 5,
+    select: {
+      id: true,
+      quoteNumber: true,
+      customerName: true,
+      customerEmail: true,
+      status: true,
+      total: true,
+      createdAt: true,
+      lastModifiedAt: true,
+      customer: {
+        select: {
+          contactName: true,
+          email: true,
+        },
+      },
+    },
   });
 }
 
@@ -180,52 +196,78 @@ export default async function AdminDashboard() {
             </a>
           </div>
         </div>
-        <div className="divide-y divide-white/10">
-          {recentQuotes.length === 0 ? (
-            <div className="p-8 text-center text-slate-500">
-              <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p>No quotes yet</p>
-            </div>
-          ) : (
-            recentQuotes.map((quote) => (
-              <div
-                key={quote.id}
-                className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
-                    <span className="text-white font-medium text-sm">
-                      {quote.contactName.charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-white">
-                      {quote.contactName}
-                    </p>
-                    <p className="text-xs text-slate-500">{quote.email}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span
-                    className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                      quote.status === 'PENDING'
-                        ? 'bg-yellow-500/20 text-yellow-400'
-                        : quote.status === 'APPROVED'
-                          ? 'bg-green-500/20 text-green-400'
-                          : 'bg-slate-500/20 text-slate-400'
-                    }`}
-                  >
-                    {quote.status}
-                  </span>
-                  <p className="text-xs text-slate-500 mt-1 flex items-center gap-1 justify-end">
-                    <Clock className="w-3 h-3" />
-                    {new Date(quote.createdAt).toLocaleDateString('en-US')}
-                  </p>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+        {recentQuotes.length === 0 ? (
+          <div className="p-8 text-center text-slate-500">
+            <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
+            <p>No quotes yet</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-white/10">
+                  <th className="text-left text-xs font-medium text-slate-400 px-4 py-3">Quote #</th>
+                  <th className="text-left text-xs font-medium text-slate-400 px-4 py-3">Customer</th>
+                  <th className="text-left text-xs font-medium text-slate-400 px-4 py-3">Status</th>
+                  <th className="text-right text-xs font-medium text-slate-400 px-4 py-3">Total</th>
+                  <th className="text-right text-xs font-medium text-slate-400 px-4 py-3">Last Modified</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {recentQuotes.map((quote) => {
+                  const displayName = quote.customer?.contactName || quote.customerName || 'Unknown';
+                  const displayEmail = quote.customer?.email || quote.customerEmail || '';
+                  const totalAmount = Number(quote.total) || 0;
+                  return (
+                    <tr
+                      key={quote.id}
+                      className="hover:bg-white/5 transition-colors group"
+                    >
+                      <td className="px-4 py-3">
+                        <a href={`/admin/quotes?selected=${quote.id}`} className="text-sm font-medium text-cyan-400 hover:text-cyan-300">
+                          {quote.quoteNumber}
+                        </a>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div>
+                          <p className="text-sm font-medium text-white">{displayName}</p>
+                          <p className="text-xs text-slate-500">{displayEmail}</p>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                            quote.status === 'PENDING'
+                              ? 'bg-yellow-500/20 text-yellow-400'
+                              : quote.status === 'APPROVED'
+                                ? 'bg-green-500/20 text-green-400'
+                                : quote.status === 'SENT'
+                                  ? 'bg-blue-500/20 text-blue-400'
+                                  : quote.status === 'DECLINED'
+                                    ? 'bg-red-500/20 text-red-400'
+                                    : 'bg-slate-500/20 text-slate-400'
+                          }`}
+                        >
+                          {quote.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className="text-sm font-medium text-green-400">
+                          ${totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className="text-sm text-slate-400">
+                          {new Date(quote.lastModifiedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Quick Actions */}

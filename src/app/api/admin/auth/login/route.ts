@@ -10,10 +10,13 @@ import {
 import { handleApiError, ApiException } from '@/lib/api-utils';
 import { createRequestLogger } from '@/lib/logger';
 import { getClientIp } from '@/lib/rate-limit';
+import { isEmailVerificationEnabled } from '@/lib/email-verification';
+import { verifyRecaptcha, isRecaptchaEnabled } from '@/lib/recaptcha';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(1, 'Password is required'),
+  recaptchaToken: z.string().optional(),
 });
 
 export async function POST(request: Request) {
@@ -39,7 +42,25 @@ export async function POST(request: Request) {
       );
     }
 
-    const { email, password } = parsed.data;
+    const { email, password, recaptchaToken } = parsed.data;
+
+    // Verify reCAPTCHA if enabled
+    const recaptchaEnabled = await isRecaptchaEnabled();
+    if (recaptchaEnabled) {
+      const clientIp = getClientIp(request);
+      const recaptchaResult = await verifyRecaptcha(recaptchaToken || '', clientIp);
+
+      if (!recaptchaResult.success) {
+        reqLogger.warn('Login failed: reCAPTCHA verification failed', { email });
+        return NextResponse.json(
+          {
+            error: recaptchaResult.error || 'reCAPTCHA verification failed',
+            code: 'RECAPTCHA_FAILED',
+          },
+          { status: 400 }
+        );
+      }
+    }
 
     // Find user by email
     const user = await prisma.adminUser.findUnique({
@@ -63,6 +84,21 @@ export async function POST(request: Request) {
     if (!isValidPassword) {
       reqLogger.warn('Login failed: invalid password', { userId: user.id });
       throw new ApiException('Invalid email or password', 401, 'INVALID_CREDENTIALS');
+    }
+
+    // Check email verification (only if verification is enabled)
+    const verificationEnabled = await isEmailVerificationEnabled();
+    if (verificationEnabled && !user.emailVerified) {
+      reqLogger.warn('Login failed: email not verified', { userId: user.id });
+      return NextResponse.json(
+        {
+          error: 'Please verify your email before logging in',
+          code: 'EMAIL_NOT_VERIFIED',
+          email: user.email,
+          userId: user.id,
+        },
+        { status: 403 }
+      );
     }
 
     // Create session

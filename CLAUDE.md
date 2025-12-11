@@ -1,0 +1,2 @@
+- memorize current state of the Analytics component
+- Any time the quotes functionality is updated, ensure the audit trail piece is always updated as well.

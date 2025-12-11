@@ -49,7 +49,11 @@
       "Bash(tasklist:*)",
       "Bash(findstr:*)",
       "Bash(cmd /c \"dir D:\\Projects\\Logoz\\nul\")",
-      "Bash(cmd /c \"del \\?\\D:\\Projects\\Logoz\\nul\")"
+      "Bash(cmd /c \"del \\?\\D:\\Projects\\Logoz\\nul\")",
+      "Bash(grep:*)",
+      "Bash(npx tsc:*)",
+      "Bash(node:*)",
+      "Bash(cmd /c \"if exist .next rmdir /s /q .next\")"
     ],
     "deny": [],
     "ask": []

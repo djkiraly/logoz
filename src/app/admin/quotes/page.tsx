@@ -19,9 +19,15 @@ import {
   Scissors,
   Printer,
   DollarSign,
+  History,
+  ChevronDown,
+  ChevronUp,
+  User,
+  Bot,
+  Clock,
 } from 'lucide-react';
 
-type QuoteStatus = 'PENDING' | 'REVIEWING' | 'SENT' | 'APPROVED' | 'ARCHIVED';
+type QuoteStatus = 'PENDING' | 'REVIEWING' | 'SENT' | 'APPROVED' | 'DECLINED' | 'ARCHIVED';
 type LineItemType = 'PRODUCT' | 'SERVICE' | 'CUSTOM' | 'SETUP_FEE' | 'SHIPPING' | 'DISCOUNT';
 type FulfillmentMethod = 'EMBROIDERY' | 'SCREEN_PRINT' | 'DTG' | 'VINYL' | 'SUBLIMATION' | 'LASER' | 'PROMO';
 type DiscountType = 'FIXED' | 'PERCENTAGE';
@@ -45,6 +51,12 @@ type Product = {
 type Supplier = {
   id: string;
   name: string;
+};
+
+type AdminUser = {
+  id: string;
+  name: string;
+  email: string;
 };
 
 type LineItem = {
@@ -78,13 +90,16 @@ type Quote = {
   customerPhone: string | null;
   customerCompany: string | null;
   customer?: Customer | null;
+  ownerId: string | null;
+  owner?: AdminUser | null;
   title: string | null;
   notes: string | null;
   internalNotes: string | null;
   validUntil: string | null;
   requestedDelivery: string | null;
   subtotal: string | number;
-  discount: string | number;
+  discountValue: string | number;  // User's original input value
+  discount: string | number;       // Calculated discount amount
   discountType: DiscountType;
   tax: string | number;
   taxRate: string | number;
@@ -95,6 +110,22 @@ type Quote = {
   approvedAt: string | null;
   lineItems: LineItem[];
   createdAt: string;
+  lastModifiedAt: string;
+};
+
+type QuoteAuditLog = {
+  id: string;
+  quoteId: string;
+  action: string;
+  description: string;
+  actorType: 'ADMIN' | 'CUSTOMER' | 'SYSTEM';
+  actorId: string | null;
+  actorName: string | null;
+  actorEmail: string | null;
+  previousValue: Record<string, unknown> | null;
+  newValue: Record<string, unknown> | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
 };
 
 const QUOTE_STATUSES: { value: QuoteStatus; label: string; color: string }[] = [
@@ -102,6 +133,7 @@ const QUOTE_STATUSES: { value: QuoteStatus; label: string; color: string }[] = [
   { value: 'REVIEWING', label: 'Reviewing', color: 'bg-blue-500/20 text-blue-400' },
   { value: 'SENT', label: 'Sent', color: 'bg-purple-500/20 text-purple-400' },
   { value: 'APPROVED', label: 'Approved', color: 'bg-green-500/20 text-green-400' },
+  { value: 'DECLINED', label: 'Declined', color: 'bg-red-500/20 text-red-400' },
   { value: 'ARCHIVED', label: 'Archived', color: 'bg-slate-500/20 text-slate-400' },
 ];
 
@@ -144,6 +176,7 @@ type QuoteFormData = {
   customerEmail: string;
   customerPhone: string;
   customerCompany: string;
+  ownerId: string;
   title: string;
   notes: string;
   internalNotes: string;
@@ -163,6 +196,7 @@ const emptyQuote: QuoteFormData = {
   customerEmail: '',
   customerPhone: '',
   customerCompany: '',
+  ownerId: '',
   title: '',
   notes: '',
   internalNotes: '',
@@ -181,6 +215,9 @@ export default function QuotesPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string>('');
+  const [currentUserRole, setCurrentUserRole] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -202,6 +239,9 @@ export default function QuotesPage() {
   const [foundCustomer, setFoundCustomer] = useState<Customer | null>(null);
   const [showFoundCustomerPrompt, setShowFoundCustomerPrompt] = useState(false);
   const [createCustomerOnSave, setCreateCustomerOnSave] = useState(true);
+  const [auditLogs, setAuditLogs] = useState<QuoteAuditLog[]>([]);
+  const [isLoadingAuditLogs, setIsLoadingAuditLogs] = useState(false);
+  const [isAuditExpanded, setIsAuditExpanded] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -213,24 +253,33 @@ export default function QuotesPage() {
       if (filterStatus) params.append('status', filterStatus);
       if (searchQuery) params.append('search', searchQuery);
 
-      const [quotesRes, customersRes, productsRes, suppliersRes] = await Promise.all([
+      const [quotesRes, customersRes, productsRes, suppliersRes, usersRes, meRes] = await Promise.all([
         fetch(`/api/admin/quotes?${params.toString()}`),
         fetch('/api/admin/customers'),
         fetch('/api/admin/products'),
         fetch('/api/admin/vendors'),
+        fetch('/api/admin/users'),
+        fetch('/api/admin/auth/me'),
       ]);
 
-      const [quotesData, customersData, productsData, suppliersData] = await Promise.all([
+      const [quotesData, customersData, productsData, suppliersData, usersData, meData] = await Promise.all([
         quotesRes.json(),
         customersRes.json(),
         productsRes.json(),
         suppliersRes.json(),
+        usersRes.json(),
+        meRes.json(),
       ]);
 
       if (quotesData.ok) setQuotes(quotesData.data);
       if (customersData.ok) setCustomers(customersData.data);
       if (productsData.ok) setProducts(productsData.data);
       if (suppliersData.ok) setSuppliers(suppliersData.data);
+      if (usersData.ok) setAdminUsers(usersData.data);
+      if (meData.user) {
+        setCurrentUserId(meData.user.id);
+        setCurrentUserRole(meData.user.role);
+      }
     } catch (error) {
       console.error('Failed to fetch data:', error);
       setMessage({ type: 'error', text: 'Failed to load data' });
@@ -241,7 +290,7 @@ export default function QuotesPage() {
 
   const openCreateModal = () => {
     setEditingQuote(null);
-    setFormData(emptyQuote);
+    setFormData({ ...emptyQuote, ownerId: currentUserId });
     setCustomerMode('existing');
     setShowNewCustomerForm(false);
     setFoundCustomer(null);
@@ -304,12 +353,13 @@ export default function QuotesPage() {
       customerEmail: quote.customerEmail || '',
       customerPhone: quote.customerPhone || '',
       customerCompany: quote.customerCompany || '',
+      ownerId: quote.ownerId || '',
       title: quote.title || '',
       notes: quote.notes || '',
       internalNotes: quote.internalNotes || '',
       validUntil: quote.validUntil ? quote.validUntil.split('T')[0] : '',
       requestedDelivery: quote.requestedDelivery ? quote.requestedDelivery.split('T')[0] : '',
-      discount: Number(quote.discount) || 0,
+      discount: Number(quote.discountValue) || Number(quote.discount) || 0,
       discountType: quote.discountType,
       taxRate: Number(quote.taxRate) || 0,
       shipping: Number(quote.shipping) || 0,
@@ -323,6 +373,24 @@ export default function QuotesPage() {
     });
     setCustomerMode(quote.customerId ? 'existing' : 'new');
     setIsModalOpen(true);
+    // Fetch audit logs for this quote
+    fetchAuditLogs(quote.id);
+  };
+
+  const fetchAuditLogs = async (quoteId: string) => {
+    setIsLoadingAuditLogs(true);
+    setAuditLogs([]);
+    try {
+      const response = await fetch(`/api/admin/quotes/${quoteId}/audit`);
+      const data = await response.json();
+      if (data.ok) {
+        setAuditLogs(data.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch audit logs:', error);
+    } finally {
+      setIsLoadingAuditLogs(false);
+    }
   };
 
   const closeModal = () => {
@@ -333,6 +401,7 @@ export default function QuotesPage() {
     setFoundCustomer(null);
     setShowFoundCustomerPrompt(false);
     setCreateCustomerOnSave(true);
+    setAuditLogs([]);
   };
 
   const calculateLineItemTotal = (item: Omit<LineItem, 'total'>): number => {
@@ -455,6 +524,7 @@ export default function QuotesPage() {
         customerEmail: customerMode === 'new' ? formData.customerEmail : null,
         customerPhone: customerMode === 'new' ? formData.customerPhone : null,
         customerCompany: customerMode === 'new' ? formData.customerCompany : null,
+        ownerId: formData.ownerId || null,
         status: editingQuote ? formData.status : 'PENDING',
         createCustomer: customerMode === 'new' && createCustomerOnSave && formData.customerEmail,
       };
@@ -509,6 +579,8 @@ export default function QuotesPage() {
     }
   };
 
+  const [sendingQuoteId, setSendingQuoteId] = useState<string | null>(null);
+
   const updateStatus = async (quote: Quote, newStatus: QuoteStatus) => {
     try {
       const response = await fetch(`/api/admin/quotes/${quote.id}`, {
@@ -528,6 +600,41 @@ export default function QuotesPage() {
         type: 'error',
         text: error instanceof Error ? error.message : 'Failed to update status',
       });
+    }
+  };
+
+  const sendQuoteToCustomer = async (quote: Quote) => {
+    // Validate customer has email
+    const customerEmail = quote.customer?.email || quote.customerEmail;
+    if (!customerEmail) {
+      setMessage({ type: 'error', text: 'Cannot send quote: No customer email address' });
+      return;
+    }
+
+    setSendingQuoteId(quote.id);
+    setMessage(null);
+
+    try {
+      const response = await fetch(`/api/admin/quotes/${quote.id}/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send quote');
+      }
+
+      setMessage({ type: 'success', text: data.message || 'Quote sent successfully!' });
+      fetchData();
+    } catch (error) {
+      setMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : 'Failed to send quote',
+      });
+    } finally {
+      setSendingQuoteId(null);
     }
   };
 
@@ -637,8 +744,10 @@ export default function QuotesPage() {
               <tr className="border-b border-white/10">
                 <th className="text-left p-4 text-sm font-medium text-slate-400">Quote #</th>
                 <th className="text-left p-4 text-sm font-medium text-slate-400">Customer</th>
+                <th className="text-left p-4 text-sm font-medium text-slate-400">Owner</th>
                 <th className="text-left p-4 text-sm font-medium text-slate-400">Items</th>
                 <th className="text-left p-4 text-sm font-medium text-slate-400">Total</th>
+                <th className="text-left p-4 text-sm font-medium text-slate-400">Last Modified</th>
                 <th className="text-left p-4 text-sm font-medium text-slate-400">Status</th>
                 <th className="text-right p-4 text-sm font-medium text-slate-400">Actions</th>
               </tr>
@@ -661,10 +770,32 @@ export default function QuotesPage() {
                     </p>
                   </td>
                   <td className="p-4">
+                    {quote.owner ? (
+                      <p className="text-slate-300">{quote.owner.name}</p>
+                    ) : (
+                      <span className="text-slate-500">Unassigned</span>
+                    )}
+                  </td>
+                  <td className="p-4">
                     <span className="text-slate-300">{quote.lineItems.length} items</span>
                   </td>
                   <td className="p-4">
                     <span className="text-white font-semibold">{formatCurrency(quote.total)}</span>
+                  </td>
+                  <td className="p-4">
+                    <span className="text-slate-300 text-sm">
+                      {new Date(quote.lastModifiedAt).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })}
+                    </span>
+                    <p className="text-xs text-slate-500">
+                      {new Date(quote.lastModifiedAt).toLocaleTimeString('en-US', {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                      })}
+                    </p>
                   </td>
                   <td className="p-4">
                     <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getStatusBadge(quote.status)}`}>
@@ -675,11 +806,16 @@ export default function QuotesPage() {
                     <div className="flex items-center justify-end gap-2">
                       {quote.status === 'PENDING' && (
                         <button
-                          onClick={() => updateStatus(quote, 'SENT')}
-                          className="p-2 text-slate-400 hover:text-purple-400 hover:bg-purple-500/10 rounded-lg transition-colors"
-                          title="Mark as sent"
+                          onClick={() => sendQuoteToCustomer(quote)}
+                          disabled={sendingQuoteId === quote.id}
+                          className="p-2 text-slate-400 hover:text-purple-400 hover:bg-purple-500/10 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Send quote to customer"
                         >
-                          <Send className="w-4 h-4" />
+                          {sendingQuoteId === quote.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Send className="w-4 h-4" />
+                          )}
                         </button>
                       )}
                       {quote.status === 'SENT' && (
@@ -692,35 +828,44 @@ export default function QuotesPage() {
                         </button>
                       )}
                       <button
+                        onClick={() => window.open(`/api/admin/quotes/${quote.id}/print`, '_blank')}
+                        className="p-2 text-slate-400 hover:text-cyan-400 hover:bg-cyan-500/10 rounded-lg transition-colors"
+                        title="Print quote"
+                      >
+                        <Printer className="w-4 h-4" />
+                      </button>
+                      <button
                         onClick={() => openEditModal(quote)}
                         className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
                         title="Edit quote"
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
-                      {deleteConfirm === quote.id ? (
-                        <div className="flex items-center gap-1">
+                      {currentUserRole === 'SUPER_ADMIN' && (
+                        deleteConfirm === quote.id ? (
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleDelete(quote.id)}
+                              className="px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+                            >
+                              Confirm
+                            </button>
+                            <button
+                              onClick={() => setDeleteConfirm(null)}
+                              className="px-2 py-1 text-xs bg-slate-600 text-white rounded hover:bg-slate-500 transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
                           <button
-                            onClick={() => handleDelete(quote.id)}
-                            className="px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+                            onClick={() => setDeleteConfirm(quote.id)}
+                            className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                            title="Delete quote"
                           >
-                            Confirm
+                            <Trash2 className="w-4 h-4" />
                           </button>
-                          <button
-                            onClick={() => setDeleteConfirm(null)}
-                            className="px-2 py-1 text-xs bg-slate-600 text-white rounded hover:bg-slate-500 transition-colors"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => setDeleteConfirm(quote.id)}
-                          className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                          title="Delete quote"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        )
                       )}
                     </div>
                   </td>
@@ -943,7 +1088,7 @@ export default function QuotesPage() {
               </div>
 
               {/* Quote Details */}
-              <div className="grid grid-cols-4 gap-4">
+              <div className="grid grid-cols-5 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Quote Title</label>
                   <input
@@ -953,6 +1098,21 @@ export default function QuotesPage() {
                     placeholder="e.g., Spring Event Apparel"
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500"
                   />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Quote Owner</label>
+                  <select
+                    value={formData.ownerId}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, ownerId: e.target.value }))}
+                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                  >
+                    <option value="">Select owner...</option>
+                    {adminUsers.map((user) => (
+                      <option key={user.id} value={user.id} className="bg-slate-800">
+                        {user.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Valid Until</label>
@@ -1081,7 +1241,7 @@ export default function QuotesPage() {
                             {(item.itemType === 'CUSTOM' || item.itemType === 'SETUP_FEE' || item.itemType === 'SHIPPING' || item.itemType === 'DISCOUNT') && (
                               <input
                                 type="text"
-                                value={item.name}
+                                value={item.name || ''}
                                 onChange={(e) => updateLineItem(index, { name: e.target.value })}
                                 placeholder="Item name"
                                 className="col-span-2 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm placeholder-slate-500"
@@ -1175,7 +1335,7 @@ export default function QuotesPage() {
                         <div className="mt-3">
                           <input
                             type="text"
-                            value={item.description}
+                            value={item.description || ''}
                             onChange={(e) => updateLineItem(index, { description: e.target.value })}
                             placeholder="Description (optional)"
                             className="w-full px-3 py-1.5 bg-white/5 border border-white/10 rounded text-white text-sm placeholder-slate-500"
@@ -1279,6 +1439,110 @@ export default function QuotesPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Audit Trail Section - Only show when editing */}
+              {editingQuote && (
+                <div className="bg-white/5 border border-white/10 rounded-lg overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setIsAuditExpanded(!isAuditExpanded)}
+                    className="w-full flex items-center justify-between p-4 text-left hover:bg-white/5 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <History className="w-4 h-4 text-slate-400" />
+                      <h3 className="text-sm font-semibold text-white">Activity History</h3>
+                      <span className="text-xs text-slate-500">
+                        ({auditLogs.length} {auditLogs.length === 1 ? 'entry' : 'entries'})
+                      </span>
+                    </div>
+                    {isAuditExpanded ? (
+                      <ChevronUp className="w-4 h-4 text-slate-400" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-slate-400" />
+                    )}
+                  </button>
+
+                  {isAuditExpanded && (
+                    <div className="border-t border-white/10 max-h-64 overflow-y-auto">
+                      {isLoadingAuditLogs ? (
+                        <div className="flex items-center justify-center py-8">
+                          <Loader2 className="w-5 h-5 text-cyan-400 animate-spin" />
+                        </div>
+                      ) : auditLogs.length === 0 ? (
+                        <div className="text-center py-8 text-slate-500 text-sm">
+                          <Clock className="w-6 h-6 mx-auto mb-2 opacity-50" />
+                          <p>No activity history yet</p>
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-white/5">
+                          {auditLogs.map((log) => (
+                            <div key={log.id} className="p-4 hover:bg-white/5 transition-colors">
+                              <div className="flex items-start gap-3">
+                                {/* Actor Icon */}
+                                <div className={`p-1.5 rounded-full shrink-0 ${
+                                  log.actorType === 'ADMIN'
+                                    ? 'bg-cyan-500/20 text-cyan-400'
+                                    : log.actorType === 'CUSTOMER'
+                                    ? 'bg-green-500/20 text-green-400'
+                                    : 'bg-slate-500/20 text-slate-400'
+                                }`}>
+                                  {log.actorType === 'ADMIN' ? (
+                                    <User className="w-3.5 h-3.5" />
+                                  ) : log.actorType === 'CUSTOMER' ? (
+                                    <User className="w-3.5 h-3.5" />
+                                  ) : (
+                                    <Bot className="w-3.5 h-3.5" />
+                                  )}
+                                </div>
+
+                                {/* Content */}
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm text-white">{log.description}</p>
+                                  <div className="flex items-center gap-2 mt-1 text-xs text-slate-500">
+                                    <span>
+                                      {log.actorType === 'ADMIN' && log.actorName
+                                        ? log.actorName
+                                        : log.actorType === 'CUSTOMER'
+                                        ? 'Customer'
+                                        : 'System'}
+                                    </span>
+                                    <span>•</span>
+                                    <span>
+                                      {new Date(log.createdAt).toLocaleDateString('en-US', {
+                                        month: 'short',
+                                        day: 'numeric',
+                                        year: 'numeric',
+                                      })}
+                                      {' at '}
+                                      {new Date(log.createdAt).toLocaleTimeString('en-US', {
+                                        hour: 'numeric',
+                                        minute: '2-digit',
+                                      })}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Action Badge */}
+                                <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${
+                                  log.action.includes('CREATED') ? 'bg-green-500/20 text-green-400' :
+                                  log.action.includes('SENT') ? 'bg-purple-500/20 text-purple-400' :
+                                  log.action.includes('APPROVED') ? 'bg-green-500/20 text-green-400' :
+                                  log.action.includes('DECLINED') ? 'bg-red-500/20 text-red-400' :
+                                  log.action.includes('STATUS') ? 'bg-blue-500/20 text-blue-400' :
+                                  log.action.includes('PRICING') ? 'bg-yellow-500/20 text-yellow-400' :
+                                  'bg-slate-500/20 text-slate-400'
+                                }`}>
+                                  {log.action.replace(/_/g, ' ')}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Modal Footer */}
