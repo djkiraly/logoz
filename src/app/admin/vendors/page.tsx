@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Plus,
   Loader2,
@@ -11,16 +11,15 @@ import {
   ExternalLink,
   Star,
   X,
+  Upload,
+  Image as ImageIcon,
 } from 'lucide-react';
 
-type FulfillmentMethod =
-  | 'EMBROIDERY'
-  | 'SCREEN_PRINT'
-  | 'DTG'
-  | 'VINYL'
-  | 'SUBLIMATION'
-  | 'LASER'
-  | 'PROMO';
+type Category = {
+  id: string;
+  title: string;
+  slug: string;
+};
 
 type Vendor = {
   id: string;
@@ -29,57 +28,69 @@ type Vendor = {
   website: string | null;
   description: string | null;
   leadTimeDays: number | null;
-  capabilities: FulfillmentMethod[];
+  categories: Category[];
   featured: boolean;
   _count?: {
     products: number;
   };
 };
 
-const FULFILLMENT_METHODS: { value: FulfillmentMethod; label: string }[] = [
-  { value: 'EMBROIDERY', label: 'Embroidery' },
-  { value: 'SCREEN_PRINT', label: 'Screen Print' },
-  { value: 'DTG', label: 'DTG (Direct to Garment)' },
-  { value: 'VINYL', label: 'Vinyl' },
-  { value: 'SUBLIMATION', label: 'Sublimation' },
-  { value: 'LASER', label: 'Laser' },
-  { value: 'PROMO', label: 'Promotional' },
-];
+type VendorFormData = {
+  name: string;
+  logoUrl: string | null;
+  website: string | null;
+  description: string | null;
+  leadTimeDays: number | null;
+  categoryIds: string[];
+  featured: boolean;
+};
 
-const emptyVendor: Omit<Vendor, 'id' | '_count'> = {
+const emptyVendor: VendorFormData = {
   name: '',
   logoUrl: null,
   website: null,
   description: null,
   leadTimeDays: null,
-  capabilities: [],
+  categoryIds: [],
   featured: false,
 };
 
 export default function VendorsPage() {
   const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
-  const [formData, setFormData] = useState<Omit<Vendor, 'id' | '_count'>>(emptyVendor);
+  const [formData, setFormData] = useState<VendorFormData>(emptyVendor);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    fetchVendors();
+    fetchData();
   }, []);
 
-  const fetchVendors = async () => {
+  const fetchData = async () => {
     try {
-      const response = await fetch('/api/admin/vendors');
-      const data = await response.json();
-      if (data.ok && data.data) {
-        setVendors(data.data);
+      const [vendorsRes, categoriesRes] = await Promise.all([
+        fetch('/api/admin/vendors'),
+        fetch('/api/admin/categories'),
+      ]);
+      const [vendorsData, categoriesData] = await Promise.all([
+        vendorsRes.json(),
+        categoriesRes.json(),
+      ]);
+      if (vendorsData.ok && vendorsData.data) {
+        setVendors(vendorsData.data);
+      }
+      if (categoriesData.ok && categoriesData.data) {
+        setCategories(categoriesData.data);
       }
     } catch (error) {
-      console.error('Failed to fetch vendors:', error);
-      setMessage({ type: 'error', text: 'Failed to load vendors' });
+      console.error('Failed to fetch data:', error);
+      setMessage({ type: 'error', text: 'Failed to load data' });
     } finally {
       setIsLoading(false);
     }
@@ -99,10 +110,49 @@ export default function VendorsPage() {
       website: vendor.website,
       description: vendor.description,
       leadTimeDays: vendor.leadTimeDays,
-      capabilities: vendor.capabilities,
+      categoryIds: vendor.categories?.map((c) => c.id) || [],
       featured: vendor.featured,
     });
     setIsModalOpen(true);
+  };
+
+  const handleLogoUpload = async (file: File) => {
+    setIsUploading(true);
+    try {
+      const uploadFormData = new FormData();
+      uploadFormData.append('file', file);
+      uploadFormData.append('folder', 'vendors');
+
+      const response = await fetch('/api/admin/upload', {
+        method: 'POST',
+        body: uploadFormData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Upload failed');
+      }
+
+      setFormData((prev) => ({ ...prev, logoUrl: data.data.url }));
+      setMessage({ type: 'success', text: 'Logo uploaded successfully!' });
+    } catch (error) {
+      console.error('Upload error:', error);
+      setMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : 'Upload failed',
+      });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleLogoUpload(file);
+    }
+    e.target.value = '';
   };
 
   const closeModal = () => {
@@ -143,7 +193,7 @@ export default function VendorsPage() {
         text: editingVendor ? 'Vendor updated successfully!' : 'Vendor created successfully!',
       });
       closeModal();
-      fetchVendors();
+      fetchData();
     } catch (error) {
       setMessage({
         type: 'error',
@@ -167,7 +217,7 @@ export default function VendorsPage() {
 
       setMessage({ type: 'success', text: 'Vendor deleted successfully!' });
       setDeleteConfirm(null);
-      fetchVendors();
+      fetchData();
     } catch (error) {
       setMessage({
         type: 'error',
@@ -198,12 +248,12 @@ export default function VendorsPage() {
     setFormData((prev) => ({ ...prev, [name]: checked }));
   };
 
-  const handleCapabilityToggle = (method: FulfillmentMethod) => {
+  const handleCategoryToggle = (categoryId: string) => {
     setFormData((prev) => ({
       ...prev,
-      capabilities: prev.capabilities.includes(method)
-        ? prev.capabilities.filter((m) => m !== method)
-        : [...prev.capabilities, method],
+      categoryIds: prev.categoryIds.includes(categoryId)
+        ? prev.categoryIds.filter((id) => id !== categoryId)
+        : [...prev.categoryIds, categoryId],
     }));
   };
 
@@ -270,7 +320,7 @@ export default function VendorsPage() {
             <thead>
               <tr className="border-b border-white/10">
                 <th className="text-left p-4 text-sm font-medium text-slate-400">Vendor</th>
-                <th className="text-left p-4 text-sm font-medium text-slate-400">Capabilities</th>
+                <th className="text-left p-4 text-sm font-medium text-slate-400">Categories</th>
                 <th className="text-left p-4 text-sm font-medium text-slate-400">Lead Time</th>
                 <th className="text-left p-4 text-sm font-medium text-slate-400">Products</th>
                 <th className="text-right p-4 text-sm font-medium text-slate-400">Actions</th>
@@ -316,21 +366,21 @@ export default function VendorsPage() {
                   </td>
                   <td className="p-4">
                     <div className="flex flex-wrap gap-1">
-                      {vendor.capabilities.length > 0 ? (
-                        vendor.capabilities.slice(0, 3).map((cap) => (
+                      {vendor.categories && vendor.categories.length > 0 ? (
+                        vendor.categories.slice(0, 3).map((cat) => (
                           <span
-                            key={cap}
+                            key={cat.id}
                             className="px-2 py-0.5 text-xs bg-cyan-500/10 text-cyan-400 rounded"
                           >
-                            {cap.replace('_', ' ')}
+                            {cat.title}
                           </span>
                         ))
                       ) : (
                         <span className="text-slate-500 text-sm">None</span>
                       )}
-                      {vendor.capabilities.length > 3 && (
+                      {vendor.categories && vendor.categories.length > 3 && (
                         <span className="px-2 py-0.5 text-xs bg-slate-500/10 text-slate-400 rounded">
-                          +{vendor.capabilities.length - 3}
+                          +{vendor.categories.length - 3}
                         </span>
                       )}
                     </div>
@@ -426,19 +476,65 @@ export default function VendorsPage() {
                 />
               </div>
 
-              {/* Logo URL */}
+              {/* Logo */}
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Logo URL
+                  Logo
                 </label>
-                <input
-                  type="url"
-                  name="logoUrl"
-                  value={formData.logoUrl || ''}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
-                  placeholder="https://example.com/logo.png"
-                />
+                <div className="flex items-start gap-4">
+                  {formData.logoUrl ? (
+                    <div className="relative">
+                      <img
+                        src={formData.logoUrl}
+                        alt="Vendor logo"
+                        className="w-20 h-20 rounded-lg object-contain bg-white/10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setFormData((prev) => ({ ...prev, logoUrl: null }))}
+                        className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-20 h-20 rounded-lg bg-white/5 border border-white/10 border-dashed flex items-center justify-center">
+                      <ImageIcon className="w-8 h-8 text-slate-500" />
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileChange}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading}
+                      className="flex items-center gap-2 px-4 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors disabled:opacity-50"
+                    >
+                      {isUploading ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Upload className="w-4 h-4" />
+                      )}
+                      Upload Logo
+                    </button>
+                    <p className="text-xs text-slate-500 mt-2">Or enter URL:</p>
+                    <input
+                      type="url"
+                      value={formData.logoUrl || ''}
+                      onChange={(e) =>
+                        setFormData((prev) => ({ ...prev, logoUrl: e.target.value || null }))
+                      }
+                      className="w-full mt-1 px-3 py-1.5 text-sm bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                      placeholder="https://..."
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Website */}
@@ -487,27 +583,33 @@ export default function VendorsPage() {
                 />
               </div>
 
-              {/* Capabilities */}
+              {/* Categories */}
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Capabilities
+                  Categories
                 </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {FULFILLMENT_METHODS.map((method) => (
-                    <label
-                      key={method.value}
-                      className="flex items-center gap-2 p-2 bg-white/5 border border-white/10 rounded-lg cursor-pointer hover:bg-white/10 transition-colors"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={formData.capabilities.includes(method.value)}
-                        onChange={() => handleCapabilityToggle(method.value)}
-                        className="w-4 h-4 rounded border-white/20 bg-white/5 text-cyan-500 focus:ring-cyan-500/50"
-                      />
-                      <span className="text-sm text-slate-300">{method.label}</span>
-                    </label>
-                  ))}
-                </div>
+                {categories.length === 0 ? (
+                  <p className="text-sm text-slate-500">
+                    No categories available. Create categories in Products → Categories first.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    {categories.map((category) => (
+                      <label
+                        key={category.id}
+                        className="flex items-center gap-2 p-2 bg-white/5 border border-white/10 rounded-lg cursor-pointer hover:bg-white/10 transition-colors"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={formData.categoryIds.includes(category.id)}
+                          onChange={() => handleCategoryToggle(category.id)}
+                          className="w-4 h-4 rounded border-white/20 bg-white/5 text-cyan-500 focus:ring-cyan-500/50"
+                        />
+                        <span className="text-sm text-slate-300">{category.title}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Featured */}

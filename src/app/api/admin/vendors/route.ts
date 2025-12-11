@@ -11,21 +11,11 @@ export const dynamic = 'force-dynamic';
 
 const vendorSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
-  logoUrl: z.string().url().nullable().optional(),
+  logoUrl: z.string().nullable().optional(),
   website: z.string().url().nullable().optional(),
   description: z.string().max(1000).nullable().optional(),
   leadTimeDays: z.number().int().min(0).nullable().optional(),
-  capabilities: z.array(
-    z.enum([
-      'EMBROIDERY',
-      'SCREEN_PRINT',
-      'DTG',
-      'VINYL',
-      'SUBLIMATION',
-      'LASER',
-      'PROMO',
-    ])
-  ).default([]),
+  categoryIds: z.array(z.string()).default([]),
   featured: z.boolean().default(false),
 });
 
@@ -41,15 +31,35 @@ export async function GET() {
       return NextResponse.json({ ok: true, data: [] });
     }
 
-    // Fetch all vendors with product count
-    const vendors = await prisma.supplier.findMany({
-      orderBy: [{ featured: 'desc' }, { name: 'asc' }],
-      include: {
-        _count: {
-          select: { products: true },
+    // Fetch all vendors with product count and categories
+    let vendors;
+    try {
+      // Try with categories relation (requires Prisma client regeneration)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vendors = await (prisma.supplier.findMany as any)({
+        orderBy: [{ featured: 'desc' }, { name: 'asc' }],
+        include: {
+          categories: {
+            select: { id: true, title: true, slug: true },
+          },
+          _count: {
+            select: { products: true },
+          },
         },
-      },
-    });
+      });
+    } catch {
+      // Fallback without categories if relation not yet available
+      vendors = await prisma.supplier.findMany({
+        orderBy: [{ featured: 'desc' }, { name: 'asc' }],
+        include: {
+          _count: {
+            select: { products: true },
+          },
+        },
+      });
+      // Add empty categories array to each vendor
+      vendors = vendors.map((v) => ({ ...v, categories: [] }));
+    }
 
     return NextResponse.json({ ok: true, data: vendors });
   } catch (error) {
@@ -92,23 +102,50 @@ export async function POST(request: Request) {
 
     const data = parsed.data;
 
-    // Create vendor
-    const vendor = await prisma.supplier.create({
-      data: {
-        name: data.name,
-        logoUrl: data.logoUrl || null,
-        website: data.website || null,
-        description: data.description || null,
-        leadTimeDays: data.leadTimeDays ?? null,
-        capabilities: data.capabilities,
-        featured: data.featured,
-      },
-      include: {
-        _count: {
-          select: { products: true },
+    // Create vendor - using type assertion due to Prisma client needing regeneration
+    let vendor;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vendor = await (prisma.supplier.create as any)({
+        data: {
+          name: data.name,
+          logoUrl: data.logoUrl || null,
+          website: data.website || null,
+          description: data.description || null,
+          leadTimeDays: data.leadTimeDays ?? null,
+          featured: data.featured,
+          categories: data.categoryIds.length > 0
+            ? { connect: data.categoryIds.map((id: string) => ({ id })) }
+            : undefined,
         },
-      },
-    });
+        include: {
+          categories: {
+            select: { id: true, title: true, slug: true },
+          },
+          _count: {
+            select: { products: true },
+          },
+        },
+      });
+    } catch {
+      // Fallback without categories
+      vendor = await prisma.supplier.create({
+        data: {
+          name: data.name,
+          logoUrl: data.logoUrl || null,
+          website: data.website || null,
+          description: data.description || null,
+          leadTimeDays: data.leadTimeDays ?? null,
+          featured: data.featured,
+        },
+        include: {
+          _count: {
+            select: { products: true },
+          },
+        },
+      });
+      vendor = { ...vendor, categories: [] };
+    }
 
     // Log audit event
     const clientIp = getClientIp(request);

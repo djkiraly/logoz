@@ -144,6 +144,7 @@ export async function POST(request: NextRequest) {
       taxRate,
       shipping,
       lineItems,
+      createCustomer, // Flag to auto-create customer from manual entry
     } = body;
 
     // Validate - need either customerId or customer info
@@ -152,6 +153,45 @@ export async function POST(request: NextRequest) {
         { error: 'Either select a customer or provide customer name/email' },
         { status: 400 }
       );
+    }
+
+    // If createCustomer flag is set and we have email, create the customer
+    let resolvedCustomerId = customerId;
+    if (createCustomer && !customerId && customerEmail) {
+      const normalizedEmail = customerEmail.trim().toLowerCase();
+
+      // Check if customer already exists
+      const existingCustomer = await prisma.customer.findUnique({
+        where: { email: normalizedEmail },
+      });
+
+      if (existingCustomer) {
+        // Use existing customer
+        resolvedCustomerId = existingCustomer.id;
+        adminLogger.info('Using existing customer for quote', {
+          userId: user.id,
+          customerId: existingCustomer.id,
+          email: normalizedEmail,
+        });
+      } else {
+        // Create new customer
+        const newCustomer = await prisma.customer.create({
+          data: {
+            contactName: customerName || 'Unknown',
+            email: normalizedEmail,
+            phone: customerPhone || null,
+            companyName: customerCompany || null,
+            status: 'LEAD',
+            customerType: 'BUSINESS',
+          },
+        });
+        resolvedCustomerId = newCustomer.id;
+        adminLogger.info('Created new customer for quote', {
+          userId: user.id,
+          customerId: newCustomer.id,
+          email: normalizedEmail,
+        });
+      }
     }
 
     // Generate quote number
@@ -209,11 +249,11 @@ export async function POST(request: NextRequest) {
     const quote = await prisma.quote.create({
       data: {
         quoteNumber,
-        customerId: customerId || null,
-        customerName: customerId ? null : customerName,
-        customerEmail: customerId ? null : customerEmail,
-        customerPhone: customerId ? null : customerPhone,
-        customerCompany: customerId ? null : customerCompany,
+        customerId: resolvedCustomerId || null,
+        customerName: resolvedCustomerId ? null : customerName,
+        customerEmail: resolvedCustomerId ? null : customerEmail,
+        customerPhone: resolvedCustomerId ? null : customerPhone,
+        customerCompany: resolvedCustomerId ? null : customerCompany,
         title: title || null,
         notes: notes || null,
         internalNotes: internalNotes || null,

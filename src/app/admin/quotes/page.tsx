@@ -198,6 +198,10 @@ export default function QuotesPage() {
     phone: '',
     companyName: '',
   });
+  const [isLookingUp, setIsLookingUp] = useState(false);
+  const [foundCustomer, setFoundCustomer] = useState<Customer | null>(null);
+  const [showFoundCustomerPrompt, setShowFoundCustomerPrompt] = useState(false);
+  const [createCustomerOnSave, setCreateCustomerOnSave] = useState(true);
 
   useEffect(() => {
     fetchData();
@@ -240,7 +244,56 @@ export default function QuotesPage() {
     setFormData(emptyQuote);
     setCustomerMode('existing');
     setShowNewCustomerForm(false);
+    setFoundCustomer(null);
+    setShowFoundCustomerPrompt(false);
+    setCreateCustomerOnSave(true);
     setIsModalOpen(true);
+  };
+
+  // Lookup customer by email when manual entry email is filled
+  const lookupCustomerByEmail = async (email: string) => {
+    if (!email || !email.includes('@')) return;
+
+    setIsLookingUp(true);
+    try {
+      const response = await fetch(`/api/admin/customers/lookup?email=${encodeURIComponent(email)}`);
+      const data = await response.json();
+
+      if (data.ok && data.found && data.data) {
+        setFoundCustomer(data.data);
+        setShowFoundCustomerPrompt(true);
+      } else {
+        setFoundCustomer(null);
+        setShowFoundCustomerPrompt(false);
+      }
+    } catch (error) {
+      console.error('Customer lookup failed:', error);
+    } finally {
+      setIsLookingUp(false);
+    }
+  };
+
+  const useFoundCustomer = () => {
+    if (foundCustomer) {
+      // Add to customers list if not already there
+      setCustomers((prev) => {
+        const exists = prev.some((c) => c.id === foundCustomer.id);
+        if (!exists) {
+          return [foundCustomer, ...prev];
+        }
+        return prev;
+      });
+      setFormData((prev) => ({ ...prev, customerId: foundCustomer.id }));
+      setCustomerMode('existing');
+      setShowFoundCustomerPrompt(false);
+      setFoundCustomer(null);
+      setMessage({ type: 'success', text: 'Customer selected from database' });
+    }
+  };
+
+  const continueManualEntry = () => {
+    setShowFoundCustomerPrompt(false);
+    // Keep the form data as is, customer will be created on save
   };
 
   const openEditModal = (quote: Quote) => {
@@ -277,6 +330,9 @@ export default function QuotesPage() {
     setEditingQuote(null);
     setFormData(emptyQuote);
     setShowNewCustomerForm(false);
+    setFoundCustomer(null);
+    setShowFoundCustomerPrompt(false);
+    setCreateCustomerOnSave(true);
   };
 
   const calculateLineItemTotal = (item: Omit<LineItem, 'total'>): number => {
@@ -400,6 +456,7 @@ export default function QuotesPage() {
         customerPhone: customerMode === 'new' ? formData.customerPhone : null,
         customerCompany: customerMode === 'new' ? formData.customerCompany : null,
         status: editingQuote ? formData.status : 'PENDING',
+        createCustomer: customerMode === 'new' && createCustomerOnSave && formData.customerEmail,
       };
 
       const response = await fetch(url, {
@@ -792,35 +849,95 @@ export default function QuotesPage() {
                     )}
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-4">
-                    <input
-                      type="text"
-                      value={formData.customerName}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, customerName: e.target.value }))}
-                      placeholder="Contact Name"
-                      className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500"
-                    />
-                    <input
-                      type="email"
-                      value={formData.customerEmail}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, customerEmail: e.target.value }))}
-                      placeholder="Email"
-                      className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500"
-                    />
-                    <input
-                      type="text"
-                      value={formData.customerCompany}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, customerCompany: e.target.value }))}
-                      placeholder="Company Name"
-                      className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500"
-                    />
-                    <input
-                      type="tel"
-                      value={formData.customerPhone}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, customerPhone: e.target.value }))}
-                      placeholder="Phone"
-                      className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500"
-                    />
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <input
+                        type="text"
+                        value={formData.customerName}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, customerName: e.target.value }))}
+                        placeholder="Contact Name"
+                        className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500"
+                      />
+                      <div className="relative">
+                        <input
+                          type="email"
+                          value={formData.customerEmail}
+                          onChange={(e) => {
+                            setFormData((prev) => ({ ...prev, customerEmail: e.target.value }));
+                            setShowFoundCustomerPrompt(false);
+                          }}
+                          onBlur={(e) => lookupCustomerByEmail(e.target.value)}
+                          placeholder="Email"
+                          className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500"
+                        />
+                        {isLookingUp && (
+                          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-400 animate-spin" />
+                        )}
+                      </div>
+                      <input
+                        type="text"
+                        value={formData.customerCompany}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, customerCompany: e.target.value }))}
+                        placeholder="Company Name"
+                        className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500"
+                      />
+                      <input
+                        type="tel"
+                        value={formData.customerPhone}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, customerPhone: e.target.value }))}
+                        placeholder="Phone"
+                        className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500"
+                      />
+                    </div>
+
+                    {/* Found Customer Prompt */}
+                    {showFoundCustomerPrompt && foundCustomer && (
+                      <div className="p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-lg">
+                        <div className="flex items-start gap-3">
+                          <AlertCircle className="w-5 h-5 text-cyan-400 mt-0.5 shrink-0" />
+                          <div className="flex-1">
+                            <p className="text-sm text-white font-medium mb-1">
+                              Customer found in database
+                            </p>
+                            <p className="text-xs text-slate-400 mb-3">
+                              {foundCustomer.companyName || foundCustomer.contactName} ({foundCustomer.email})
+                              {foundCustomer.phone && ` • ${foundCustomer.phone}`}
+                            </p>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={useFoundCustomer}
+                                className="px-3 py-1.5 bg-cyan-500 text-white text-sm rounded-lg hover:bg-cyan-600"
+                              >
+                                Use This Customer
+                              </button>
+                              <button
+                                type="button"
+                                onClick={continueManualEntry}
+                                className="px-3 py-1.5 bg-white/10 text-white text-sm rounded-lg hover:bg-white/20"
+                              >
+                                Continue Manual Entry
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Create Customer Option */}
+                    {!showFoundCustomerPrompt && formData.customerEmail && (
+                      <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={createCustomerOnSave}
+                          onChange={(e) => setCreateCustomerOnSave(e.target.checked)}
+                          className="w-4 h-4 rounded border-white/20 bg-white/5 text-cyan-500 focus:ring-cyan-500/50"
+                        />
+                        <span className="text-slate-400">
+                          Add to customer database when saving quote
+                        </span>
+                      </label>
+                    )}
                   </div>
                 )}
               </div>

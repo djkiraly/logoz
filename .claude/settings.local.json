@@ -45,7 +45,11 @@
       "Bash(git -C \"D:/Projects/Logoz\" fetch origin)",
       "Bash(npx next build)",
       "Bash(git restore:*)",
-      "Bash(npm ls:*)"
+      "Bash(npm ls:*)",
+      "Bash(tasklist:*)",
+      "Bash(findstr:*)",
+      "Bash(cmd /c \"dir D:\\Projects\\Logoz\\nul\")",
+      "Bash(cmd /c \"del \\?\\D:\\Projects\\Logoz\\nul\")"
     ],
     "deny": [],
     "ask": []

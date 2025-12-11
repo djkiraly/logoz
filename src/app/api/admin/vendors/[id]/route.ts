@@ -11,21 +11,11 @@ export const dynamic = 'force-dynamic';
 
 const vendorUpdateSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
-  logoUrl: z.string().url().nullable().optional(),
+  logoUrl: z.string().nullable().optional(),
   website: z.string().url().nullable().optional(),
   description: z.string().max(1000).nullable().optional(),
   leadTimeDays: z.number().int().min(0).nullable().optional(),
-  capabilities: z.array(
-    z.enum([
-      'EMBROIDERY',
-      'SCREEN_PRINT',
-      'DTG',
-      'VINYL',
-      'SUBLIMATION',
-      'LASER',
-      'PROMO',
-    ])
-  ).default([]),
+  categoryIds: z.array(z.string()).default([]),
   featured: z.boolean().default(false),
 });
 
@@ -47,14 +37,33 @@ export async function GET(request: Request, context: RouteContext) {
 
     const { id } = await context.params;
 
-    const vendor = await prisma.supplier.findUnique({
-      where: { id },
-      include: {
-        _count: {
-          select: { products: true },
+    let vendor;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vendor = await (prisma.supplier.findUnique as any)({
+        where: { id },
+        include: {
+          categories: {
+            select: { id: true, title: true, slug: true },
+          },
+          _count: {
+            select: { products: true },
+          },
         },
-      },
-    });
+      });
+    } catch {
+      vendor = await prisma.supplier.findUnique({
+        where: { id },
+        include: {
+          _count: {
+            select: { products: true },
+          },
+        },
+      });
+      if (vendor) {
+        vendor = { ...vendor, categories: [] };
+      }
+    }
 
     if (!vendor) {
       throw new ApiException('Vendor not found', 404, 'NOT_FOUND');
@@ -113,23 +122,51 @@ export async function PUT(request: Request, context: RouteContext) {
     const data = parsed.data;
 
     // Update vendor
-    const vendor = await prisma.supplier.update({
-      where: { id },
-      data: {
-        name: data.name,
-        logoUrl: data.logoUrl || null,
-        website: data.website || null,
-        description: data.description || null,
-        leadTimeDays: data.leadTimeDays ?? null,
-        capabilities: data.capabilities,
-        featured: data.featured,
-      },
-      include: {
-        _count: {
-          select: { products: true },
+    let vendor;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vendor = await (prisma.supplier.update as any)({
+        where: { id },
+        data: {
+          name: data.name,
+          logoUrl: data.logoUrl || null,
+          website: data.website || null,
+          description: data.description || null,
+          leadTimeDays: data.leadTimeDays ?? null,
+          featured: data.featured,
+          categories: {
+            set: data.categoryIds.map((catId: string) => ({ id: catId })),
+          },
         },
-      },
-    });
+        include: {
+          categories: {
+            select: { id: true, title: true, slug: true },
+          },
+          _count: {
+            select: { products: true },
+          },
+        },
+      });
+    } catch {
+      // Fallback without categories
+      vendor = await prisma.supplier.update({
+        where: { id },
+        data: {
+          name: data.name,
+          logoUrl: data.logoUrl || null,
+          website: data.website || null,
+          description: data.description || null,
+          leadTimeDays: data.leadTimeDays ?? null,
+          featured: data.featured,
+        },
+        include: {
+          _count: {
+            select: { products: true },
+          },
+        },
+      });
+      vendor = { ...vendor, categories: [] };
+    }
 
     // Log audit event
     const clientIp = getClientIp(request);

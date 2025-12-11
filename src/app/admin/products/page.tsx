@@ -14,7 +14,9 @@ import {
   X,
   Upload,
   Image as ImageIcon,
+  FolderTree,
 } from 'lucide-react';
+import Link from 'next/link';
 
 type FulfillmentMethod =
   | 'EMBROIDERY'
@@ -44,6 +46,7 @@ type Product = {
   heroImageUrl: string | null;
   gallery: string[];
   basePrice: string | number;
+  cost: string | number | null;
   minQuantity: number;
   categoryId: string;
   supplierId: string | null;
@@ -72,6 +75,7 @@ type ProductFormData = {
   heroImageUrl: string | null;
   gallery: string[];
   basePrice: string;
+  cost: string;
   minQuantity: number;
   categoryId: string;
   supplierId: string | null;
@@ -87,6 +91,7 @@ const emptyProduct: ProductFormData = {
   heroImageUrl: null,
   gallery: [],
   basePrice: '0',
+  cost: '',
   minQuantity: 1,
   categoryId: '',
   supplierId: null,
@@ -154,6 +159,7 @@ export default function ProductsPage() {
       heroImageUrl: product.heroImageUrl,
       gallery: product.gallery || [],
       basePrice: String(product.basePrice),
+      cost: product.cost ? String(product.cost) : '',
       minQuantity: product.minQuantity,
       categoryId: product.categoryId,
       supplierId: product.supplierId,
@@ -403,13 +409,22 @@ export default function ProductsPage() {
             Manage your product catalog. Products marked as visible will appear on your storefront.
           </p>
         </div>
-        <button
-          onClick={openCreateModal}
-          className="flex items-center gap-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Add Product
-        </button>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/admin/products/categories"
+            className="flex items-center gap-2 px-4 py-2 text-slate-400 hover:text-white border border-white/10 rounded-lg hover:bg-white/5 transition-colors"
+          >
+            <FolderTree className="w-4 h-4" />
+            Manage Categories
+          </Link>
+          <button
+            onClick={openCreateModal}
+            className="flex items-center gap-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Add Product
+          </button>
+        </div>
       </div>
 
       {/* Status Message */}
@@ -732,8 +747,8 @@ export default function ProductsPage() {
                 </div>
               </div>
 
-              {/* Price & Quantity */}
-              <div className="grid grid-cols-2 gap-4">
+              {/* Price, Cost & Quantity */}
+              <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">
                     Base Price ($)
@@ -742,6 +757,21 @@ export default function ProductsPage() {
                     type="number"
                     name="basePrice"
                     value={formData.basePrice}
+                    onChange={handleChange}
+                    min="0"
+                    step="0.01"
+                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                    placeholder="0.00"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Cost ($) <span className="text-slate-500 font-normal">(optional)</span>
+                  </label>
+                  <input
+                    type="number"
+                    name="cost"
+                    value={formData.cost}
                     onChange={handleChange}
                     min="0"
                     step="0.01"

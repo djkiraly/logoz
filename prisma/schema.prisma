@@ -34,27 +34,29 @@ model SiteSetting {
 }
 
 model Category {
-  id          String    @id @default(cuid())
-  slug        String    @unique
+  id          String     @id @default(cuid())
+  slug        String     @unique
   title       String
   description String
-  featured    Boolean   @default(false)
+  imageUrl    String?
+  featured    Boolean    @default(false)
   services    Service[]
   products    Product[]
+  suppliers   Supplier[] @relation("SupplierCategories")
 
   @@index([featured, title])
 }
 
 model Supplier {
-  id           String              @id @default(cuid())
-  name         String              @unique
-  logoUrl      String?
-  website      String?
-  description  String?
-  leadTimeDays Int?
-  capabilities FulfillmentMethod[]
-  featured     Boolean             @default(false)
-  products     Product[]
+  id             String           @id @default(cuid())
+  name           String           @unique
+  logoUrl        String?
+  website        String?
+  description    String?
+  leadTimeDays   Int?
+  featured       Boolean          @default(false)
+  categories     Category[]       @relation("SupplierCategories")
+  products       Product[]
   quoteLineItems QuoteLineItem[]
 
   @@index([featured, name])
@@ -68,6 +70,7 @@ model Product {
   heroImageUrl String?
   gallery      String[]
   basePrice    Decimal             @db.Money
+  cost         Decimal?            @db.Money
   minQuantity  Int                 @default(1)
   category     Category            @relation(fields: [categoryId], references: [id])
   categoryId   String

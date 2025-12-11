@@ -76,6 +76,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       heroImageUrl,
       gallery,
       basePrice,
+      cost,
       minQuantity,
       categoryId,
       supplierId,
@@ -117,8 +118,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // Build update data
-    const updateData: Prisma.ProductUpdateInput = {};
+    // Build update data - using Record type to allow new fields pending Prisma regeneration
+    const updateData: Record<string, unknown> = {};
 
     if (sku !== undefined) updateData.sku = sku;
     if (name !== undefined) updateData.name = name;
@@ -126,6 +127,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     if (heroImageUrl !== undefined) updateData.heroImageUrl = heroImageUrl || null;
     if (gallery !== undefined) updateData.gallery = gallery;
     if (basePrice !== undefined) updateData.basePrice = new Prisma.Decimal(basePrice);
+    if (cost !== undefined) updateData.cost = cost ? new Prisma.Decimal(cost) : null;
     if (minQuantity !== undefined) updateData.minQuantity = minQuantity;
     if (categoryId !== undefined) updateData.category = { connect: { id: categoryId } };
     if (supplierId !== undefined) {
