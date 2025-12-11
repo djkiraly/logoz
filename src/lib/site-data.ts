@@ -38,6 +38,10 @@ export type SiteSettings = {
   contactPhone: string;
   address: string;
   announcement?: string | null;
+  bannerEnabled: boolean;
+  headerCtaEnabled: boolean;
+  headerCtaLabel: string;
+  headerCtaLink: string;
 };
 
 const normalizeSettings = (settings: Partial<SiteSettings>): SiteSettings => ({
@@ -50,6 +54,10 @@ const normalizeSettings = (settings: Partial<SiteSettings>): SiteSettings => ({
   contactPhone: settings.contactPhone ?? fallback.siteSettings.contactPhone,
   address: settings.address ?? fallback.siteSettings.address,
   announcement: settings.announcement ?? fallback.siteSettings.announcement,
+  bannerEnabled: settings.bannerEnabled ?? true,
+  headerCtaEnabled: settings.headerCtaEnabled ?? true,
+  headerCtaLabel: settings.headerCtaLabel ?? 'Build a design',
+  headerCtaLink: settings.headerCtaLink ?? '/design-studio',
 });
 
 export const getSiteSettings = cache(async () => {

@@ -22,7 +22,7 @@ export function SiteHeader({ settings }: SiteHeaderProps) {
 
   return (
     <header className="sticky top-0 z-50 border-b border-white/10 bg-[#05060a]/80 backdrop-blur-xl">
-      {settings.announcement ? (
+      {settings.bannerEnabled && settings.announcement ? (
         <div className="bg-gradient-to-r from-indigo-500 to-orange-400 px-4 py-2 text-center text-sm text-white">
           {settings.announcement}
         </div>
@@ -49,12 +49,14 @@ export function SiteHeader({ settings }: SiteHeaderProps) {
           >
             Talk to sales
           </Link>
-          <Link
-            href="/design-studio"
-            className="hidden rounded-full bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-[0_15px_35px_rgba(107,114,255,0.35)] lg:inline-flex"
-          >
-            Build a design
-          </Link>
+          {settings.headerCtaEnabled && (
+            <Link
+              href={settings.headerCtaLink || '/design-studio'}
+              className="hidden rounded-full bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-[0_15px_35px_rgba(107,114,255,0.35)] lg:inline-flex"
+            >
+              {settings.headerCtaLabel || 'Build a design'}
+            </Link>
+          )}
           <button
             className="rounded-full border border-white/20 p-2 text-white lg:hidden"
             aria-label={isOpen ? 'Close navigation' : 'Open navigation'}

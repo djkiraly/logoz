@@ -19,18 +19,22 @@ enum FulfillmentMethod {
 }
 
 model SiteSetting {
-  id           Int     @id @default(1)
-  siteName     String  @default("Logoz Custom")
-  heroHeading  String
-  heroCopy     String
-  ctaLabel     String
-  ctaLink      String
-  contactEmail String  @unique
-  contactPhone String
-  address      String
-  announcement String?
-  theme        Json?
-  gcsConfig    Json?
+  id             Int     @id @default(1)
+  siteName       String  @default("Logoz Custom")
+  heroHeading    String
+  heroCopy       String
+  ctaLabel       String
+  ctaLink        String
+  contactEmail   String  @unique
+  contactPhone   String
+  address        String
+  announcement   String?
+  bannerEnabled    Boolean @default(true)
+  headerCtaEnabled Boolean @default(true)
+  headerCtaLabel   String  @default("Build a design")
+  headerCtaLink    String  @default("/design-studio")
+  theme          Json?
+  gcsConfig      Json?
 
   // reCAPTCHA Configuration
   recaptchaEnabled   Boolean @default(false)

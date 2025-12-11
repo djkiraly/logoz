@@ -25,6 +25,10 @@ const settingsSchema = z.object({
   contactPhone: z.string().max(30).optional().or(z.literal('')),
   address: z.string().max(500).optional().or(z.literal('')),
   announcement: z.string().max(200).optional().or(z.literal('')),
+  bannerEnabled: z.boolean().optional(),
+  headerCtaEnabled: z.boolean().optional(),
+  headerCtaLabel: z.string().max(50).optional().or(z.literal('')),
+  headerCtaLink: z.string().max(200).optional().or(z.literal('')),
   gcsConfig: gcsConfigSchema,
   // reCAPTCHA settings
   recaptchaEnabled: z.boolean().optional(),
@@ -114,6 +118,10 @@ export async function PUT(request: Request) {
       contactPhone: getValue(data.contactPhone, existingSettings?.contactPhone, ''),
       address: getValue(data.address, existingSettings?.address, ''),
       announcement: data.announcement !== undefined ? (data.announcement || null) : (existingSettings?.announcement || null),
+      bannerEnabled: data.bannerEnabled !== undefined ? data.bannerEnabled : (existingSettings?.bannerEnabled ?? true),
+      headerCtaEnabled: data.headerCtaEnabled !== undefined ? data.headerCtaEnabled : (existingSettings?.headerCtaEnabled ?? true),
+      headerCtaLabel: getValue(data.headerCtaLabel, existingSettings?.headerCtaLabel, 'Build a design'),
+      headerCtaLink: getValue(data.headerCtaLink, existingSettings?.headerCtaLink, '/design-studio'),
     };
 
     // Add gcsConfig if provided (only if field exists in schema)

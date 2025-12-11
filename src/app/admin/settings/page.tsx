@@ -13,6 +13,10 @@ type SiteSettings = {
   contactPhone: string;
   address: string;
   announcement: string;
+  bannerEnabled: boolean;
+  headerCtaEnabled: boolean;
+  headerCtaLabel: string;
+  headerCtaLink: string;
 };
 
 type GcsConfig = {
@@ -54,6 +58,10 @@ export default function SettingsPage() {
     contactPhone: '',
     address: '',
     announcement: '',
+    bannerEnabled: true,
+    headerCtaEnabled: true,
+    headerCtaLabel: 'Build a design',
+    headerCtaLink: '/design-studio',
   });
   const [gcsConfig, setGcsConfig] = useState<GcsConfig>(emptyGcsConfig);
   const [recaptchaConfig, setRecaptchaConfig] = useState<RecaptchaConfig>(emptyRecaptchaConfig);
@@ -87,6 +95,10 @@ export default function SettingsPage() {
           contactPhone: data.data.contactPhone || '',
           address: data.data.address || '',
           announcement: data.data.announcement || '',
+          bannerEnabled: data.data.bannerEnabled ?? true,
+          headerCtaEnabled: data.data.headerCtaEnabled ?? true,
+          headerCtaLabel: data.data.headerCtaLabel || 'Build a design',
+          headerCtaLink: data.data.headerCtaLink || '/design-studio',
         });
         if (data.data.gcsConfig) {
           setGcsConfig({
@@ -236,6 +248,14 @@ export default function SettingsPage() {
     setSettings((prev) => ({ ...prev, [name]: value }));
   };
 
+  const handleBannerToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSettings((prev) => ({ ...prev, bannerEnabled: e.target.checked }));
+  };
+
+  const handleHeaderCtaToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSettings((prev) => ({ ...prev, headerCtaEnabled: e.target.checked }));
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -307,21 +327,101 @@ export default function SettingsPage() {
             />
           </div>
 
+          {/* Banner Toggle */}
+          <div className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-lg">
+            <div>
+              <p className="text-sm font-medium text-slate-300">Show Announcement Banner</p>
+              <p className="text-xs text-slate-500">
+                Display the announcement banner at the top of your site
+              </p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={settings.bannerEnabled}
+                onChange={handleBannerToggle}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-cyan-500/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-500"></div>
+            </label>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">
-              Announcement Banner
+              Banner Message
             </label>
             <input
               type="text"
               name="announcement"
               value={settings.announcement}
               onChange={handleChange}
-              className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+              disabled={!settings.bannerEnabled}
+              className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 disabled:opacity-50 disabled:cursor-not-allowed"
               placeholder="Free shipping on orders over $100!"
             />
             <p className="text-xs text-slate-500 mt-1">
-              Leave empty to hide the announcement bar
+              The message displayed in the announcement banner
             </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Header Navigation */}
+      <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl">
+        <div className="p-5 border-b border-white/10">
+          <h2 className="text-lg font-semibold text-white">Header Navigation</h2>
+          <p className="text-sm text-slate-400">Customize the header CTA button</p>
+        </div>
+        <div className="p-5 space-y-5">
+          {/* Header CTA Toggle */}
+          <div className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-lg">
+            <div>
+              <p className="text-sm font-medium text-slate-300">Show Header CTA Button</p>
+              <p className="text-xs text-slate-500">
+                Display the primary call-to-action button in the site header
+              </p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={settings.headerCtaEnabled}
+                onChange={handleHeaderCtaToggle}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-cyan-500/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-500"></div>
+            </label>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Header CTA Button Text
+              </label>
+              <input
+                type="text"
+                name="headerCtaLabel"
+                value={settings.headerCtaLabel}
+                onChange={handleChange}
+                disabled={!settings.headerCtaEnabled}
+                className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                placeholder="Build a design"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Header CTA Button Link
+              </label>
+              <input
+                type="text"
+                name="headerCtaLink"
+                value={settings.headerCtaLink}
+                onChange={handleChange}
+                disabled={!settings.headerCtaEnabled}
+                className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                placeholder="/design-studio"
+              />
+            </div>
           </div>
         </div>
       </div>
