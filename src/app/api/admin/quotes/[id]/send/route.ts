@@ -62,8 +62,7 @@ function generateQuoteEmailHtml(
       contactName: string;
     } | null;
   },
-  approveUrl: string,
-  declineUrl: string,
+  quoteUrl: string,
   siteName: string,
   contactEmail: string,
   contactPhone: string
@@ -225,31 +224,20 @@ function generateQuoteEmailHtml(
           </tr>
           ` : ''}
 
-          <!-- Action Buttons -->
+          <!-- Action Button -->
           <tr>
             <td style="padding: 0 40px 40px 40px;">
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td align="center" style="padding-bottom: 16px;">
-                    <p style="margin: 0 0 20px 0; color: #475569; font-size: 15px;">Ready to proceed? Let us know your decision:</p>
+                    <p style="margin: 0 0 20px 0; color: #475569; font-size: 15px;">Click below to view your quote details and respond:</p>
                   </td>
                 </tr>
                 <tr>
                   <td align="center">
-                    <table cellpadding="0" cellspacing="0">
-                      <tr>
-                        <td style="padding-right: 12px;">
-                          <a href="${approveUrl}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #16a34a 0%, #15803d 100%); color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 600; border-radius: 8px; box-shadow: 0 2px 4px rgba(22, 163, 74, 0.3);">
-                            Approve Quote
-                          </a>
-                        </td>
-                        <td style="padding-left: 12px;">
-                          <a href="${declineUrl}" style="display: inline-block; padding: 14px 32px; background-color: #f1f5f9; color: #64748b; text-decoration: none; font-size: 15px; font-weight: 600; border-radius: 8px; border: 1px solid #e2e8f0;">
-                            Decline Quote
-                          </a>
-                        </td>
-                      </tr>
-                    </table>
+                    <a href="${quoteUrl}" style="display: inline-block; padding: 14px 40px; background: linear-gradient(135deg, #0891b2 0%, #1e40af 100%); color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 600; border-radius: 8px; box-shadow: 0 2px 4px rgba(8, 145, 178, 0.3);">
+                      See Quote
+                    </a>
                   </td>
                 </tr>
               </table>
@@ -342,14 +330,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       : 'http://localhost:3000';
 
     const quoteUrl = `${baseUrl}/quote/${accessToken}`;
-    const approveUrl = `${quoteUrl}?action=approve`;
-    const declineUrl = `${quoteUrl}?action=decline`;
 
     // Generate email HTML
     const emailHtml = generateQuoteEmailHtml(
       quote,
-      approveUrl,
-      declineUrl,
+      quoteUrl,
       siteName,
       contactEmail,
       contactPhone
@@ -374,11 +359,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Update quote status to SENT
+    // Track if this is a resend
+    const isResend = quote.sentAt !== null;
+
+    // Update quote status to SENT (or keep current status if already beyond SENT)
     const updatedQuote = await prisma.quote.update({
       where: { id },
       data: {
-        status: 'SENT',
+        // Only change status to SENT if it's currently PENDING or REVIEWING
+        ...(quote.status === 'PENDING' || quote.status === 'REVIEWING' ? { status: 'SENT' } : {}),
         sentAt: new Date(),
         lastModifiedAt: new Date(),
       },
@@ -401,12 +390,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       },
     });
 
-    adminLogger.info('Quote sent to customer', {
+    adminLogger.info(isResend ? 'Quote resent to customer' : 'Quote sent to customer', {
       userId: user.id,
       quoteId: id,
       quoteNumber: quote.quoteNumber,
       recipientEmail,
       messageId: emailResult.messageId,
+      isResend,
     });
 
     // Log audit trail
@@ -417,27 +407,29 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       { id: user.id, name: user.name, email: user.email }
     );
 
-    // Track activity
-    await trackEntityActivity({
-      entityType: 'QUOTE',
-      entityId: id,
-      activityType: 'STATUS_CHANGED',
-      userId: user.id,
-      oldValue: { status: quote.status },
-      newValue: { status: 'SENT', sentTo: recipientEmail },
-    });
+    // Track activity (only if status actually changed)
+    if (quote.status === 'PENDING' || quote.status === 'REVIEWING') {
+      await trackEntityActivity({
+        entityType: 'QUOTE',
+        entityId: id,
+        activityType: 'STATUS_CHANGED',
+        userId: user.id,
+        oldValue: { status: quote.status },
+        newValue: { status: 'SENT', sentTo: recipientEmail },
+      });
 
-    // Track funnel event
-    await trackQuoteFunnelEvent({
-      stage: 'QUOTE_SENT',
-      quoteId: id,
-      customerId: quote.customerId || undefined,
-    });
+      // Track funnel event only on first send
+      await trackQuoteFunnelEvent({
+        stage: 'QUOTE_SENT',
+        quoteId: id,
+        customerId: quote.customerId || undefined,
+      });
+    }
 
     return NextResponse.json({
       ok: true,
       data: updatedQuote,
-      message: `Quote sent to ${recipientEmail}`,
+      message: isResend ? `Quote resent to ${recipientEmail}` : `Quote sent to ${recipientEmail}`,
     });
   } catch (error) {
     adminLogger.error('Failed to send quote', {

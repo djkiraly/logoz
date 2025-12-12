@@ -17,6 +17,7 @@ type SiteSettings = {
   headerCtaEnabled: boolean;
   headerCtaLabel: string;
   headerCtaLink: string;
+  copyrightText: string;
 };
 
 type GcsConfig = {
@@ -62,6 +63,7 @@ export default function SettingsPage() {
     headerCtaEnabled: true,
     headerCtaLabel: 'Build a design',
     headerCtaLink: '/design-studio',
+    copyrightText: 'Crafted in the cloud.',
   });
   const [gcsConfig, setGcsConfig] = useState<GcsConfig>(emptyGcsConfig);
   const [recaptchaConfig, setRecaptchaConfig] = useState<RecaptchaConfig>(emptyRecaptchaConfig);
@@ -99,6 +101,7 @@ export default function SettingsPage() {
           headerCtaEnabled: data.data.headerCtaEnabled ?? true,
           headerCtaLabel: data.data.headerCtaLabel || 'Build a design',
           headerCtaLink: data.data.headerCtaLink || '/design-studio',
+          copyrightText: data.data.copyrightText || 'Crafted in the cloud.',
         });
         if (data.data.gcsConfig) {
           setGcsConfig({
@@ -542,6 +545,32 @@ export default function SettingsPage() {
               className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 resize-none"
               placeholder="123 Main St, City, State 12345"
             />
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl">
+        <div className="p-5 border-b border-white/10">
+          <h2 className="text-lg font-semibold text-white">Footer</h2>
+          <p className="text-sm text-slate-400">Customize the site footer</p>
+        </div>
+        <div className="p-5 space-y-5">
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Copyright Text
+            </label>
+            <input
+              type="text"
+              name="copyrightText"
+              value={settings.copyrightText}
+              onChange={handleChange}
+              className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+              placeholder="Crafted in the cloud."
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              Displayed after &quot;© {new Date().getFullYear()} {settings.siteName || 'Your Site'}.&quot; in the footer
+            </p>
           </div>
         </div>
       </div>

@@ -24,6 +24,22 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const customer = await prisma.customer.findUnique({
       where: { id },
+      include: {
+        quotes: {
+          select: {
+            id: true,
+            quoteNumber: true,
+            title: true,
+            status: true,
+            total: true,
+            createdAt: true,
+            validUntil: true,
+            sentAt: true,
+            approvedAt: true,
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
     });
 
     if (!customer) {

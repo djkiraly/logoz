@@ -15,6 +15,7 @@ import {
   X,
   Store,
   Building2,
+  Wrench,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useState, useEffect } from 'react';
@@ -38,6 +39,7 @@ const navigation: NavItem[] = [
   { name: 'Analytics', href: '/admin/analytics', icon: BarChart3 },
   { name: 'Site Settings', href: '/admin/settings', icon: Settings },
   { name: 'Appearance', href: '/admin/appearance', icon: Palette },
+  { name: 'Services', href: '/admin/services', icon: Wrench },
   { name: 'Products', href: '/admin/products', icon: Package },
   { name: 'Vendors', href: '/admin/vendors', icon: Store },
   { name: 'Customers', href: '/admin/customers', icon: Building2 },

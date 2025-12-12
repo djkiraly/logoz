@@ -161,6 +161,7 @@ export async function POST(request: NextRequest) {
       lineItems,
       createCustomer, // Flag to auto-create customer from manual entry
       ownerId, // Internal resource responsible for the quote
+      artworkRequired, // Whether artwork approval is required
     } = body;
 
     // Validate - need either customerId or customer info
@@ -285,6 +286,7 @@ export async function POST(request: NextRequest) {
         total,
         ownerId: ownerId || user.id, // Default to current user if not specified
         createdBy: user.id,
+        artworkRequired: artworkRequired || false,
         lineItems: {
           create: processedLineItems,
         },

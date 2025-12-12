@@ -111,6 +111,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       status,
       lineItems,
       ownerId,
+      artworkRequired,
     } = body;
 
     // Calculate totals if line items are provided
@@ -180,6 +181,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     if (ownerId !== undefined) {
       updateData.owner = ownerId ? { connect: { id: ownerId } } : { disconnect: true };
     }
+    if (artworkRequired !== undefined) updateData.artworkRequired = artworkRequired;
 
     if (status !== undefined) {
       updateData.status = status;

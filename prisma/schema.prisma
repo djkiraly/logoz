@@ -33,6 +33,7 @@ model SiteSetting {
   headerCtaEnabled Boolean @default(true)
   headerCtaLabel   String  @default("Build a design")
   headerCtaLink    String  @default("/design-studio")
+  copyrightText    String  @default("Crafted in the cloud.")
   theme          Json?
   gcsConfig      Json?
 
@@ -201,6 +202,9 @@ enum QuoteStatus {
   PENDING
   REVIEWING
   SENT
+  ARTWORK_PENDING    // Artwork sent to customer, awaiting approval
+  ARTWORK_APPROVED   // Customer approved the artwork
+  ARTWORK_DECLINED   // Customer declined the artwork
   APPROVED
   DECLINED
   ARCHIVED
@@ -252,6 +256,20 @@ model Quote {
   // Public access token for customer viewing/approval
   accessToken     String?         @unique
 
+  // Artwork approval workflow
+  artworkRequired     Boolean     @default(false)
+  artworkUrl          String?     // URL to the artwork file
+  artworkFileName     String?     // Original filename for display
+  artworkToken        String?     @unique  // Token for public artwork approval page
+  artworkSentAt       DateTime?   // When artwork was sent to customer
+  artworkApprovedAt   DateTime?   // When customer approved artwork
+  artworkDeclinedAt   DateTime?   // When customer declined artwork
+  artworkNotes        String?     // Customer's notes on artwork (approval/decline reason)
+  artworkVersion      Int         @default(1)  // Track artwork revisions
+
+  // Artwork version history
+  artworkVersions     ArtworkVersion[]
+
   // Line items
   lineItems       QuoteLineItem[]
 
@@ -274,6 +292,39 @@ model Quote {
   @@index([ownerId])
   @@index([createdAt(sort: Desc)])
   @@index([lastModifiedAt(sort: Desc)])
+}
+
+// ===========================================
+// Artwork Version History
+// ===========================================
+
+model ArtworkVersion {
+  id              String    @id @default(cuid())
+  quote           Quote     @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  quoteId         String
+
+  // Version info
+  version         Int
+  url             String    // URL to the artwork file
+  fileName        String    // Original filename
+
+  // Status at time of archival
+  status          String    // PENDING, APPROVED, DECLINED
+  sentAt          DateTime?
+  approvedAt      DateTime?
+  declinedAt      DateTime?
+  customerNotes   String?   // Customer feedback for this version
+
+  // Who uploaded this version
+  uploadedById    String?
+  uploadedByName  String?
+  uploadedByEmail String?
+
+  createdAt       DateTime  @default(now())
+
+  @@unique([quoteId, version])
+  @@index([quoteId])
+  @@index([createdAt(sort: Desc)])
 }
 
 model QuoteLineItem {
@@ -377,6 +428,12 @@ enum QuoteAuditAction {
   OWNER_CHANGED
   PRICING_UPDATED
   DELETED
+  // Artwork approval actions
+  ARTWORK_UPLOADED
+  ARTWORK_SENT_TO_CUSTOMER
+  ARTWORK_APPROVED_BY_CUSTOMER
+  ARTWORK_DECLINED_BY_CUSTOMER
+  ARTWORK_UPDATED
 }
 
 enum QuoteAuditActorType {
@@ -768,9 +825,11 @@ enum NotificationType {
   INTERNAL_QUOTE_CREATED
   INTERNAL_QUOTE_STATUS_CHANGE
   INTERNAL_USER_VERIFICATION
+  INTERNAL_ARTWORK_RESPONSE      // Notify admin when customer responds to artwork
   // External (customer) notifications
   CUSTOMER_QUOTE_SENT
   CUSTOMER_QUOTE_STATUS_CHANGE
+  CUSTOMER_ARTWORK_APPROVAL      // Send artwork for customer approval
 }
 
 model NotificationSetting {

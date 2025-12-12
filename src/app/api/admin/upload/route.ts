@@ -5,6 +5,8 @@ import {
   validateFileType,
   validateFileSize,
   ALLOWED_IMAGE_TYPES,
+  ALLOWED_ARTWORK_TYPES,
+  MAX_DOCUMENT_SIZE,
   isGcsEnabled,
   getGcsConfig,
 } from '@/lib/gcs';
@@ -54,29 +56,45 @@ export async function POST(request: NextRequest) {
 
     const file = formData.get('file') as File | null;
     const folder = formData.get('folder') as string | null;
+    const uploadType = formData.get('type') as string | null; // 'artwork' for artwork uploads
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
+    // Determine allowed types and max size based on upload type
+    const isArtworkUpload = uploadType === 'artwork';
+    const allowedTypes = isArtworkUpload ? ALLOWED_ARTWORK_TYPES : ALLOWED_IMAGE_TYPES;
+    const maxSize = isArtworkUpload ? MAX_DOCUMENT_SIZE : undefined;
+    const defaultFolder = isArtworkUpload ? 'artwork' : 'products';
+
     adminLogger.info('Processing upload', {
       fileName: file.name,
       fileType: file.type,
       fileSize: file.size,
-      folder: folder || 'products',
+      folder: folder || defaultFolder,
+      uploadType: uploadType || 'image',
       userId: user.id,
     });
 
     // Validate file type
-    if (!validateFileType(file.type, ALLOWED_IMAGE_TYPES)) {
+    if (!validateFileType(file.type, allowedTypes)) {
+      const typeMessage = isArtworkUpload
+        ? 'Only images and design files are allowed (JPEG, PNG, GIF, WebP, SVG, PDF, AI, EPS).'
+        : 'Only images are allowed (JPEG, PNG, GIF, WebP, SVG).';
       return NextResponse.json(
-        { error: `Invalid file type "${file.type}". Only images are allowed (JPEG, PNG, GIF, WebP, SVG).` },
+        { error: `Invalid file type "${file.type}". ${typeMessage}` },
         { status: 400 }
       );
     }
 
     // Validate file size
-    if (!validateFileSize(file.size, file.type)) {
+    if (maxSize && file.size > maxSize) {
+      return NextResponse.json(
+        { error: `File too large (${(file.size / 1024 / 1024).toFixed(2)}MB). Maximum size is ${maxSize / 1024 / 1024}MB.` },
+        { status: 400 }
+      );
+    } else if (!maxSize && !validateFileSize(file.size, file.type)) {
       return NextResponse.json(
         { error: `File too large (${(file.size / 1024 / 1024).toFixed(2)}MB). Maximum size is 10MB for images.` },
         { status: 400 }
@@ -99,7 +117,7 @@ export async function POST(request: NextRequest) {
 
     // Upload to GCS
     const result = await uploadFile(buffer, file.name, {
-      folder: folder || 'products',
+      folder: folder || defaultFolder,
       contentType: file.type,
     });
 

@@ -53,7 +53,12 @@
       "Bash(grep:*)",
       "Bash(npx tsc:*)",
       "Bash(node:*)",
-      "Bash(cmd /c \"if exist .next rmdir /s /q .next\")"
+      "Bash(cmd /c \"if exist .next rmdir /s /q .next\")",
+      "Bash(cd:*)",
+      "Bash(copy:*)",
+      "Bash(cmd /c copy /Y \"D:\\Projects\\Logoz\\src\\lib\\notifications.ts\" \"D:\\Projects\\Logoz\\web\\src\\lib\\notifications.ts\")",
+      "Bash(cmd /c copy:*)",
+      "Bash(cmd /c dir \"D:\\Projects\\Logoz\\web\\src\\app\\admin\\quotes\\page.tsx\")"
     ],
     "deny": [],
     "ask": []

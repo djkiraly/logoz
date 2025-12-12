@@ -42,6 +42,7 @@ export type SiteSettings = {
   headerCtaEnabled: boolean;
   headerCtaLabel: string;
   headerCtaLink: string;
+  copyrightText: string;
 };
 
 const normalizeSettings = (settings: Partial<SiteSettings>): SiteSettings => ({
@@ -58,6 +59,7 @@ const normalizeSettings = (settings: Partial<SiteSettings>): SiteSettings => ({
   headerCtaEnabled: settings.headerCtaEnabled ?? true,
   headerCtaLabel: settings.headerCtaLabel ?? 'Build a design',
   headerCtaLink: settings.headerCtaLink ?? '/design-studio',
+  copyrightText: settings.copyrightText ?? 'Crafted in the cloud.',
 });
 
 export const getSiteSettings = cache(async () => {

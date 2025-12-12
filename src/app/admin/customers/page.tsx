@@ -16,10 +16,27 @@ import {
   Phone,
   MapPin,
   Filter,
+  FileText,
+  ExternalLink,
+  Calendar,
+  DollarSign,
 } from 'lucide-react';
 
 type CustomerStatus = 'LEAD' | 'PROSPECT' | 'ACTIVE' | 'INACTIVE' | 'CHURNED';
 type CustomerType = 'INDIVIDUAL' | 'BUSINESS' | 'NONPROFIT' | 'GOVERNMENT' | 'EDUCATION';
+type QuoteStatus = 'PENDING' | 'REVIEWING' | 'SENT' | 'APPROVED' | 'DECLINED' | 'ARCHIVED';
+
+type CustomerQuote = {
+  id: string;
+  quoteNumber: string;
+  title: string | null;
+  status: QuoteStatus;
+  total: string;
+  createdAt: string;
+  validUntil: string | null;
+  sentAt: string | null;
+  approvedAt: string | null;
+};
 
 type Customer = {
   id: string;
@@ -59,6 +76,7 @@ type Customer = {
   notes: string | null;
   lastContactAt: string | null;
   createdAt: string;
+  quotes?: CustomerQuote[];
 };
 
 const CUSTOMER_STATUSES: { value: CustomerStatus; label: string; color: string }[] = [
@@ -67,6 +85,15 @@ const CUSTOMER_STATUSES: { value: CustomerStatus; label: string; color: string }
   { value: 'ACTIVE', label: 'Active', color: 'bg-green-500/20 text-green-400' },
   { value: 'INACTIVE', label: 'Inactive', color: 'bg-slate-500/20 text-slate-400' },
   { value: 'CHURNED', label: 'Churned', color: 'bg-red-500/20 text-red-400' },
+];
+
+const QUOTE_STATUSES: { value: QuoteStatus; label: string; color: string }[] = [
+  { value: 'PENDING', label: 'Pending', color: 'bg-yellow-500/20 text-yellow-400' },
+  { value: 'REVIEWING', label: 'Reviewing', color: 'bg-blue-500/20 text-blue-400' },
+  { value: 'SENT', label: 'Sent', color: 'bg-purple-500/20 text-purple-400' },
+  { value: 'APPROVED', label: 'Approved', color: 'bg-green-500/20 text-green-400' },
+  { value: 'DECLINED', label: 'Declined', color: 'bg-red-500/20 text-red-400' },
+  { value: 'ARCHIVED', label: 'Archived', color: 'bg-slate-500/20 text-slate-400' },
 ];
 
 const CUSTOMER_TYPES: { value: CustomerType; label: string }[] = [
@@ -196,8 +223,10 @@ export default function CustomersPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterType, setFilterType] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'basic' | 'address' | 'crm' | 'notes'>('basic');
+  const [activeTab, setActiveTab] = useState<'basic' | 'address' | 'crm' | 'notes' | 'quotes'>('basic');
   const [tagInput, setTagInput] = useState('');
+  const [isLoadingCustomer, setIsLoadingCustomer] = useState(false);
+  const [customerQuotes, setCustomerQuotes] = useState<CustomerQuote[]>([]);
 
   useEffect(() => {
     fetchCustomers();
@@ -235,7 +264,7 @@ export default function CustomersPage() {
     setIsModalOpen(true);
   };
 
-  const openEditModal = (customer: Customer) => {
+  const openEditModal = async (customer: Customer) => {
     setEditingCustomer(customer);
     setFormData({
       companyName: customer.companyName || '',
@@ -274,7 +303,22 @@ export default function CustomersPage() {
       notes: customer.notes || '',
     });
     setActiveTab('basic');
+    setCustomerQuotes([]);
     setIsModalOpen(true);
+
+    // Fetch customer details with quotes
+    setIsLoadingCustomer(true);
+    try {
+      const response = await fetch(`/api/admin/customers/${customer.id}`);
+      const data = await response.json();
+      if (data.ok && data.data?.quotes) {
+        setCustomerQuotes(data.data.quotes);
+      }
+    } catch (error) {
+      console.error('Failed to fetch customer quotes:', error);
+    } finally {
+      setIsLoadingCustomer(false);
+    }
   };
 
   const closeModal = () => {
@@ -282,6 +326,7 @@ export default function CustomersPage() {
     setEditingCustomer(null);
     setFormData(emptyCustomer);
     setTagInput('');
+    setCustomerQuotes([]);
   };
 
   const handleSave = async () => {
@@ -387,6 +432,33 @@ export default function CustomersPage() {
   const getStatusBadge = (status: CustomerStatus) => {
     const statusConfig = CUSTOMER_STATUSES.find((s) => s.value === status);
     return statusConfig ? statusConfig.color : 'bg-slate-500/20 text-slate-400';
+  };
+
+  const getQuoteStatusBadge = (status: QuoteStatus) => {
+    const statusConfig = QUOTE_STATUSES.find((s) => s.value === status);
+    return statusConfig ? statusConfig.color : 'bg-slate-500/20 text-slate-400';
+  };
+
+  const getQuoteStatusLabel = (status: QuoteStatus) => {
+    const statusConfig = QUOTE_STATUSES.find((s) => s.value === status);
+    return statusConfig ? statusConfig.label : status;
+  };
+
+  const formatMoney = (value: string | number) => {
+    const num = typeof value === 'string' ? parseFloat(value) : value;
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+    }).format(num || 0);
+  };
+
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return '-';
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
   };
 
   const filteredCustomers = customers.filter((customer) => {
@@ -644,6 +716,7 @@ export default function CustomersPage() {
                 { key: 'address', label: 'Address' },
                 { key: 'crm', label: 'CRM Details' },
                 { key: 'notes', label: 'Notes' },
+                ...(editingCustomer ? [{ key: 'quotes', label: `Quotes (${customerQuotes.length})` }] : []),
               ].map((tab) => (
                 <button
                   key={tab.key}
@@ -1163,6 +1236,130 @@ export default function CustomersPage() {
                       className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 resize-none"
                     />
                   </div>
+                </div>
+              )}
+
+              {/* Quotes Tab */}
+              {activeTab === 'quotes' && editingCustomer && (
+                <div className="space-y-5">
+                  {isLoadingCustomer ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
+                    </div>
+                  ) : customerQuotes.length === 0 ? (
+                    <div className="text-center py-12">
+                      <FileText className="w-12 h-12 text-slate-500 mx-auto mb-4" />
+                      <p className="text-slate-400 mb-2">No quotes for this customer yet.</p>
+                      <a
+                        href="/admin/quotes"
+                        className="inline-flex items-center gap-2 text-cyan-400 hover:text-cyan-300 text-sm"
+                      >
+                        Create a new quote
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-sm font-semibold text-white">
+                          Quote History ({customerQuotes.length})
+                        </h3>
+                        <a
+                          href="/admin/quotes"
+                          className="inline-flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300"
+                        >
+                          View all quotes
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </div>
+                      <div className="bg-white/5 rounded-lg border border-white/10 overflow-hidden">
+                        <table className="w-full">
+                          <thead>
+                            <tr className="border-b border-white/10">
+                              <th className="text-left px-4 py-3 text-xs font-medium text-slate-400">Quote #</th>
+                              <th className="text-left px-4 py-3 text-xs font-medium text-slate-400">Title</th>
+                              <th className="text-left px-4 py-3 text-xs font-medium text-slate-400">Status</th>
+                              <th className="text-right px-4 py-3 text-xs font-medium text-slate-400">Amount</th>
+                              <th className="text-left px-4 py-3 text-xs font-medium text-slate-400">Date</th>
+                              <th className="text-right px-4 py-3 text-xs font-medium text-slate-400">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {customerQuotes.map((quote) => (
+                              <tr key={quote.id} className="border-b border-white/5 hover:bg-white/5">
+                                <td className="px-4 py-3">
+                                  <span className="text-white font-mono text-sm">{quote.quoteNumber}</span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className="text-slate-300 text-sm">
+                                    {quote.title || '-'}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span
+                                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getQuoteStatusBadge(quote.status)}`}
+                                  >
+                                    {getQuoteStatusLabel(quote.status)}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  <span className="text-white font-medium text-sm">
+                                    {formatMoney(quote.total)}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center gap-1.5 text-slate-400 text-sm">
+                                    <Calendar className="w-3 h-3" />
+                                    {formatDate(quote.createdAt)}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  <a
+                                    href={`/admin/quotes?id=${quote.id}`}
+                                    className="inline-flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300"
+                                  >
+                                    View
+                                    <ExternalLink className="w-3 h-3" />
+                                  </a>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Quote Summary */}
+                      <div className="grid grid-cols-3 gap-4 mt-4">
+                        <div className="bg-white/5 rounded-lg border border-white/10 p-4">
+                          <div className="flex items-center gap-2 text-slate-400 text-xs mb-1">
+                            <FileText className="w-3 h-3" />
+                            Total Quotes
+                          </div>
+                          <p className="text-xl font-semibold text-white">{customerQuotes.length}</p>
+                        </div>
+                        <div className="bg-white/5 rounded-lg border border-white/10 p-4">
+                          <div className="flex items-center gap-2 text-slate-400 text-xs mb-1">
+                            <CheckCircle className="w-3 h-3" />
+                            Approved
+                          </div>
+                          <p className="text-xl font-semibold text-green-400">
+                            {customerQuotes.filter((q) => q.status === 'APPROVED').length}
+                          </p>
+                        </div>
+                        <div className="bg-white/5 rounded-lg border border-white/10 p-4">
+                          <div className="flex items-center gap-2 text-slate-400 text-xs mb-1">
+                            <DollarSign className="w-3 h-3" />
+                            Total Value
+                          </div>
+                          <p className="text-xl font-semibold text-white">
+                            {formatMoney(
+                              customerQuotes.reduce((sum, q) => sum + parseFloat(q.total || '0'), 0)
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

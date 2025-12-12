@@ -16,7 +16,12 @@ type QuoteAuditAction =
   | 'CUSTOMER_CHANGED'
   | 'OWNER_CHANGED'
   | 'PRICING_UPDATED'
-  | 'DELETED';
+  | 'DELETED'
+  | 'ARTWORK_UPLOADED'
+  | 'ARTWORK_SENT_TO_CUSTOMER'
+  | 'ARTWORK_APPROVED_BY_CUSTOMER'
+  | 'ARTWORK_DECLINED_BY_CUSTOMER'
+  | 'ARTWORK_UPDATED';
 
 type QuoteAuditActorType = 'ADMIN' | 'CUSTOMER' | 'SYSTEM';
 
@@ -311,4 +316,158 @@ export async function getQuoteAuditLogs(quoteId: string) {
     });
     return [];
   }
+}
+
+// ===========================================
+// Artwork Approval Audit Functions
+// ===========================================
+
+/**
+ * Log artwork uploaded
+ */
+export async function logArtworkUploaded(
+  quoteId: string,
+  quoteNumber: string,
+  artworkFileName: string,
+  artworkVersion: number,
+  actor: { id: string; name: string; email: string },
+  artworkUrl?: string
+): Promise<void> {
+  await logQuoteAudit({
+    quoteId,
+    action: 'ARTWORK_UPLOADED',
+    description: `Artwork "${artworkFileName}" uploaded (version ${artworkVersion})`,
+    actorType: 'ADMIN',
+    actorId: actor.id,
+    actorName: actor.name,
+    actorEmail: actor.email,
+    newValue: { artworkFileName, artworkVersion, artworkUrl },
+  });
+}
+
+/**
+ * Log artwork sent to customer for approval
+ */
+export async function logArtworkSentToCustomer(
+  quoteId: string,
+  quoteNumber: string,
+  recipientEmail: string,
+  artworkFileName: string,
+  actor: { id: string; name: string; email: string }
+): Promise<void> {
+  await logQuoteAudit({
+    quoteId,
+    action: 'ARTWORK_SENT_TO_CUSTOMER',
+    description: `Artwork sent to ${recipientEmail} for approval`,
+    actorType: 'ADMIN',
+    actorId: actor.id,
+    actorName: actor.name,
+    actorEmail: actor.email,
+    metadata: { recipientEmail, artworkFileName },
+  });
+}
+
+/**
+ * Log artwork approved by customer
+ */
+export async function logArtworkApprovedByCustomer(
+  quoteId: string,
+  quoteNumber: string,
+  customerEmail: string,
+  notes?: string | null
+): Promise<void> {
+  await logQuoteAudit({
+    quoteId,
+    action: 'ARTWORK_APPROVED_BY_CUSTOMER',
+    description: notes
+      ? `Artwork approved by customer with notes: "${notes.substring(0, 100)}${notes.length > 100 ? '...' : ''}"`
+      : 'Artwork approved by customer',
+    actorType: 'CUSTOMER',
+    actorEmail: customerEmail,
+    newValue: { approved: true, notes },
+  });
+}
+
+/**
+ * Log artwork declined by customer
+ */
+export async function logArtworkDeclinedByCustomer(
+  quoteId: string,
+  quoteNumber: string,
+  customerEmail: string,
+  notes?: string | null
+): Promise<void> {
+  await logQuoteAudit({
+    quoteId,
+    action: 'ARTWORK_DECLINED_BY_CUSTOMER',
+    description: notes
+      ? `Artwork declined by customer: "${notes.substring(0, 100)}${notes.length > 100 ? '...' : ''}"`
+      : 'Artwork declined by customer',
+    actorType: 'CUSTOMER',
+    actorEmail: customerEmail,
+    newValue: { approved: false, notes },
+  });
+}
+
+/**
+ * Log artwork updated (new version uploaded)
+ */
+export async function logArtworkUpdated(
+  quoteId: string,
+  quoteNumber: string,
+  previousFileName: string | null,
+  newFileName: string,
+  newVersion: number,
+  actor: { id: string; name: string; email: string },
+  newArtworkUrl?: string,
+  previousArtworkUrl?: string | null
+): Promise<void> {
+  await logQuoteAudit({
+    quoteId,
+    action: 'ARTWORK_UPDATED',
+    description: `Artwork updated to version ${newVersion}: "${newFileName}"`,
+    actorType: 'ADMIN',
+    actorId: actor.id,
+    actorName: actor.name,
+    actorEmail: actor.email,
+    previousValue: { artworkFileName: previousFileName, artworkUrl: previousArtworkUrl },
+    newValue: { artworkFileName: newFileName, artworkVersion: newVersion, artworkUrl: newArtworkUrl },
+  });
+}
+
+/**
+ * Log quote approved by customer
+ */
+export async function logQuoteApprovedByCustomer(
+  quoteId: string,
+  quoteNumber: string,
+  customerEmail: string
+): Promise<void> {
+  await logQuoteAudit({
+    quoteId,
+    action: 'APPROVED_BY_CUSTOMER',
+    description: `Quote approved by customer (${customerEmail})`,
+    actorType: 'CUSTOMER',
+    actorEmail: customerEmail,
+    newValue: { approvedAt: new Date().toISOString() },
+  });
+}
+
+/**
+ * Log quote declined by customer
+ */
+export async function logQuoteDeclinedByCustomer(
+  quoteId: string,
+  quoteNumber: string,
+  customerEmail: string,
+  notes?: string
+): Promise<void> {
+  await logQuoteAudit({
+    quoteId,
+    action: 'DECLINED_BY_CUSTOMER',
+    description: `Quote declined by customer (${customerEmail})${notes ? `: "${notes}"` : ''}`,
+    actorType: 'CUSTOMER',
+    actorEmail: customerEmail,
+    newValue: { declinedAt: new Date().toISOString(), notes },
+  });
 }

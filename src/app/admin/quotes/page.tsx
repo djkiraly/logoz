@@ -25,9 +25,14 @@ import {
   User,
   Bot,
   Clock,
+  Image as ImageIcon,
+  Upload,
+  ExternalLink,
+  Copy,
+  Mail,
 } from 'lucide-react';
 
-type QuoteStatus = 'PENDING' | 'REVIEWING' | 'SENT' | 'APPROVED' | 'DECLINED' | 'ARCHIVED';
+type QuoteStatus = 'PENDING' | 'REVIEWING' | 'SENT' | 'ARTWORK_PENDING' | 'ARTWORK_APPROVED' | 'ARTWORK_DECLINED' | 'APPROVED' | 'DECLINED' | 'ARCHIVED';
 type LineItemType = 'PRODUCT' | 'SERVICE' | 'CUSTOM' | 'SETUP_FEE' | 'SHIPPING' | 'DISCOUNT';
 type FulfillmentMethod = 'EMBROIDERY' | 'SCREEN_PRINT' | 'DTG' | 'VINYL' | 'SUBLIMATION' | 'LASER' | 'PROMO';
 type DiscountType = 'FIXED' | 'PERCENTAGE';
@@ -108,6 +113,16 @@ type Quote = {
   status: QuoteStatus;
   sentAt: string | null;
   approvedAt: string | null;
+  // Artwork approval fields
+  artworkRequired: boolean;
+  artworkUrl: string | null;
+  artworkFileName: string | null;
+  artworkToken: string | null;
+  artworkSentAt: string | null;
+  artworkApprovedAt: string | null;
+  artworkDeclinedAt: string | null;
+  artworkNotes: string | null;
+  artworkVersion: number;
   lineItems: LineItem[];
   createdAt: string;
   lastModifiedAt: string;
@@ -128,10 +143,27 @@ type QuoteAuditLog = {
   createdAt: string;
 };
 
+type ArtworkVersionData = {
+  id: string;
+  version: number;
+  url: string;
+  fileName: string;
+  status: string;
+  sentAt: string | null;
+  approvedAt: string | null;
+  declinedAt: string | null;
+  customerNotes: string | null;
+  isCurrent: boolean;
+  createdAt?: string;
+};
+
 const QUOTE_STATUSES: { value: QuoteStatus; label: string; color: string }[] = [
   { value: 'PENDING', label: 'Pending', color: 'bg-yellow-500/20 text-yellow-400' },
   { value: 'REVIEWING', label: 'Reviewing', color: 'bg-blue-500/20 text-blue-400' },
   { value: 'SENT', label: 'Sent', color: 'bg-purple-500/20 text-purple-400' },
+  { value: 'ARTWORK_PENDING', label: 'Artwork Pending', color: 'bg-orange-500/20 text-orange-400' },
+  { value: 'ARTWORK_APPROVED', label: 'Artwork Approved', color: 'bg-teal-500/20 text-teal-400' },
+  { value: 'ARTWORK_DECLINED', label: 'Artwork Declined', color: 'bg-rose-500/20 text-rose-400' },
   { value: 'APPROVED', label: 'Approved', color: 'bg-green-500/20 text-green-400' },
   { value: 'DECLINED', label: 'Declined', color: 'bg-red-500/20 text-red-400' },
   { value: 'ARCHIVED', label: 'Archived', color: 'bg-slate-500/20 text-slate-400' },
@@ -187,6 +219,7 @@ type QuoteFormData = {
   taxRate: number;
   shipping: number;
   status: QuoteStatus;
+  artworkRequired: boolean;
   lineItems: LineItem[];
 };
 
@@ -207,6 +240,7 @@ const emptyQuote: QuoteFormData = {
   taxRate: 0,
   shipping: 0,
   status: 'PENDING',
+  artworkRequired: false,
   lineItems: [],
 };
 
@@ -242,6 +276,14 @@ export default function QuotesPage() {
   const [auditLogs, setAuditLogs] = useState<QuoteAuditLog[]>([]);
   const [isLoadingAuditLogs, setIsLoadingAuditLogs] = useState(false);
   const [isAuditExpanded, setIsAuditExpanded] = useState(false);
+  const [isUploadingArtwork, setIsUploadingArtwork] = useState(false);
+  const [isSendingArtworkEmail, setIsSendingArtworkEmail] = useState(false);
+  const [artworkFile, setArtworkFile] = useState<File | null>(null);
+  const [artworkPreviewUrl, setArtworkPreviewUrl] = useState<string | null>(null);
+  const [artworkVersions, setArtworkVersions] = useState<ArtworkVersionData[]>([]);
+  const [isLoadingVersions, setIsLoadingVersions] = useState(false);
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [showUploadNewVersion, setShowUploadNewVersion] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -345,36 +387,76 @@ export default function QuotesPage() {
     // Keep the form data as is, customer will be created on save
   };
 
-  const openEditModal = (quote: Quote) => {
-    setEditingQuote(quote);
-    setFormData({
-      customerId: quote.customerId,
-      customerName: quote.customerName || '',
-      customerEmail: quote.customerEmail || '',
-      customerPhone: quote.customerPhone || '',
-      customerCompany: quote.customerCompany || '',
-      ownerId: quote.ownerId || '',
-      title: quote.title || '',
-      notes: quote.notes || '',
-      internalNotes: quote.internalNotes || '',
-      validUntil: quote.validUntil ? quote.validUntil.split('T')[0] : '',
-      requestedDelivery: quote.requestedDelivery ? quote.requestedDelivery.split('T')[0] : '',
-      discount: Number(quote.discountValue) || Number(quote.discount) || 0,
-      discountType: quote.discountType,
-      taxRate: Number(quote.taxRate) || 0,
-      shipping: Number(quote.shipping) || 0,
-      status: quote.status,
-      lineItems: quote.lineItems.map((item) => ({
-        ...item,
-        unitPrice: Number(item.unitPrice),
-        discount: Number(item.discount),
-        total: Number(item.total),
-      })),
-    });
-    setCustomerMode(quote.customerId ? 'existing' : 'new');
-    setIsModalOpen(true);
-    // Fetch audit logs for this quote
-    fetchAuditLogs(quote.id);
+  const openEditModal = async (quote: Quote) => {
+    // Fetch fresh quote data to ensure we have latest artwork info
+    try {
+      const res = await fetch(`/api/admin/quotes/${quote.id}`);
+      const data = await res.json();
+      const freshQuote = data.ok ? data.data : quote;
+
+      setEditingQuote(freshQuote);
+      setFormData({
+        customerId: freshQuote.customerId,
+        customerName: freshQuote.customerName || '',
+        customerEmail: freshQuote.customerEmail || '',
+        customerPhone: freshQuote.customerPhone || '',
+        customerCompany: freshQuote.customerCompany || '',
+        ownerId: freshQuote.ownerId || '',
+        title: freshQuote.title || '',
+        notes: freshQuote.notes || '',
+        internalNotes: freshQuote.internalNotes || '',
+        validUntil: freshQuote.validUntil ? freshQuote.validUntil.split('T')[0] : '',
+        requestedDelivery: freshQuote.requestedDelivery ? freshQuote.requestedDelivery.split('T')[0] : '',
+        discount: Number(freshQuote.discountValue) || Number(freshQuote.discount) || 0,
+        discountType: freshQuote.discountType,
+        taxRate: Number(freshQuote.taxRate) || 0,
+        shipping: Number(freshQuote.shipping) || 0,
+        status: freshQuote.status,
+        artworkRequired: freshQuote.artworkRequired || false,
+        lineItems: freshQuote.lineItems.map((item: LineItem) => ({
+          ...item,
+          unitPrice: Number(item.unitPrice),
+          discount: Number(item.discount),
+          total: Number(item.total),
+        })),
+      });
+      setCustomerMode(freshQuote.customerId ? 'existing' : 'new');
+      setIsModalOpen(true);
+      // Fetch audit logs for this quote
+      fetchAuditLogs(freshQuote.id);
+    } catch (error) {
+      console.error('Failed to fetch quote details:', error);
+      // Fallback to using passed quote
+      setEditingQuote(quote);
+      setFormData({
+        customerId: quote.customerId,
+        customerName: quote.customerName || '',
+        customerEmail: quote.customerEmail || '',
+        customerPhone: quote.customerPhone || '',
+        customerCompany: quote.customerCompany || '',
+        ownerId: quote.ownerId || '',
+        title: quote.title || '',
+        notes: quote.notes || '',
+        internalNotes: quote.internalNotes || '',
+        validUntil: quote.validUntil ? quote.validUntil.split('T')[0] : '',
+        requestedDelivery: quote.requestedDelivery ? quote.requestedDelivery.split('T')[0] : '',
+        discount: Number(quote.discountValue) || Number(quote.discount) || 0,
+        discountType: quote.discountType,
+        taxRate: Number(quote.taxRate) || 0,
+        shipping: Number(quote.shipping) || 0,
+        status: quote.status,
+        artworkRequired: quote.artworkRequired || false,
+        lineItems: quote.lineItems.map((item) => ({
+          ...item,
+          unitPrice: Number(item.unitPrice),
+          discount: Number(item.discount),
+          total: Number(item.total),
+        })),
+      });
+      setCustomerMode(quote.customerId ? 'existing' : 'new');
+      setIsModalOpen(true);
+      fetchAuditLogs(quote.id);
+    }
   };
 
   const fetchAuditLogs = async (quoteId: string) => {
@@ -393,6 +475,127 @@ export default function QuotesPage() {
     }
   };
 
+  const fetchArtworkVersions = async (quoteId: string) => {
+    setIsLoadingVersions(true);
+    try {
+      const response = await fetch(`/api/admin/quotes/${quoteId}/artwork/versions`);
+      const data = await response.json();
+      if (data.ok) {
+        setArtworkVersions(data.data.versions);
+      }
+    } catch (error) {
+      console.error('Failed to fetch artwork versions:', error);
+    } finally {
+      setIsLoadingVersions(false);
+    }
+  };
+
+  // Handle artwork file selection
+  const handleArtworkFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setArtworkFile(file);
+      // Create preview URL for images
+      if (file.type.startsWith('image/')) {
+        const url = URL.createObjectURL(file);
+        setArtworkPreviewUrl(url);
+      } else {
+        setArtworkPreviewUrl(null);
+      }
+    }
+  };
+
+  // Upload artwork to server and associate with quote
+  const handleArtworkUpload = async () => {
+    if (!artworkFile || !editingQuote) return;
+
+    setIsUploadingArtwork(true);
+    try {
+      // First, upload the file to get a URL
+      // Using a simple approach - upload to /api/upload or use base64
+      const formData = new FormData();
+      formData.append('file', artworkFile);
+      formData.append('type', 'artwork');
+      formData.append('quoteId', editingQuote.id);
+
+      const uploadRes = await fetch('/api/admin/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!uploadRes.ok) {
+        const uploadData = await uploadRes.json();
+        throw new Error(uploadData.error || 'Failed to upload file');
+      }
+
+      const uploadData = await uploadRes.json();
+      const artworkUrl = uploadData.data?.url || uploadData.url;
+
+      if (!artworkUrl) {
+        throw new Error('Upload succeeded but no URL returned');
+      }
+
+      // Now associate the artwork with the quote
+      const res = await fetch(`/api/admin/quotes/${editingQuote.id}/artwork`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          artworkUrl,
+          artworkFileName: artworkFile.name,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to save artwork');
+      }
+
+      setMessage({ type: 'success', text: `Artwork version ${data.data.artworkVersion} uploaded successfully` });
+
+      // Update the editing quote with new artwork data
+      setEditingQuote({
+        ...editingQuote,
+        artworkUrl: data.data.artworkUrl,
+        artworkFileName: data.data.artworkFileName,
+        artworkToken: data.data.artworkToken,
+        artworkVersion: data.data.artworkVersion,
+        artworkSentAt: null, // Reset since new version hasn't been sent
+        artworkApprovedAt: null,
+        artworkDeclinedAt: null,
+        artworkNotes: null,
+      });
+
+      // Clear the file input and close upload form
+      setArtworkFile(null);
+      setArtworkPreviewUrl(null);
+      setShowUploadNewVersion(false);
+
+      // Refresh data, audit logs, and version history
+      await fetchData();
+      await fetchAuditLogs(editingQuote.id);
+      if (showVersionHistory) {
+        await fetchArtworkVersions(editingQuote.id);
+      }
+    } catch (error) {
+      setMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : 'Failed to upload artwork',
+      });
+    } finally {
+      setIsUploadingArtwork(false);
+    }
+  };
+
+  // Clear artwork file selection
+  const clearArtworkFile = () => {
+    setArtworkFile(null);
+    if (artworkPreviewUrl) {
+      URL.revokeObjectURL(artworkPreviewUrl);
+      setArtworkPreviewUrl(null);
+    }
+  };
+
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingQuote(null);
@@ -402,6 +605,10 @@ export default function QuotesPage() {
     setShowFoundCustomerPrompt(false);
     setCreateCustomerOnSave(true);
     setAuditLogs([]);
+    clearArtworkFile();
+    setArtworkVersions([]);
+    setShowVersionHistory(false);
+    setShowUploadNewVersion(false);
   };
 
   const calculateLineItemTotal = (item: Omit<LineItem, 'total'>): number => {
@@ -804,20 +1011,18 @@ export default function QuotesPage() {
                   </td>
                   <td className="p-4">
                     <div className="flex items-center justify-end gap-2">
-                      {quote.status === 'PENDING' && (
-                        <button
-                          onClick={() => sendQuoteToCustomer(quote)}
-                          disabled={sendingQuoteId === quote.id}
-                          className="p-2 text-slate-400 hover:text-purple-400 hover:bg-purple-500/10 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          title="Send quote to customer"
-                        >
-                          {sendingQuoteId === quote.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Send className="w-4 h-4" />
-                          )}
-                        </button>
-                      )}
+                      <button
+                        onClick={() => sendQuoteToCustomer(quote)}
+                        disabled={sendingQuoteId === quote.id}
+                        className="p-2 text-slate-400 hover:text-purple-400 hover:bg-purple-500/10 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title={quote.sentAt ? 'Resend quote to customer' : 'Send quote to customer'}
+                      >
+                        {sendingQuoteId === quote.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Send className="w-4 h-4" />
+                        )}
+                      </button>
                       {quote.status === 'SENT' && (
                         <button
                           onClick={() => updateStatus(quote, 'APPROVED')}
@@ -1371,7 +1576,420 @@ export default function QuotesPage() {
                       className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 resize-none"
                     />
                   </div>
+
+                  {/* Artwork Approval Toggle */}
+                  <div className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <ImageIcon className="w-5 h-5 text-cyan-400" />
+                      <div>
+                        <p className="text-sm font-medium text-white">Artwork Approval Required</p>
+                        <p className="text-xs text-slate-400">Customer must approve artwork before production</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFormData((prev) => ({ ...prev, artworkRequired: !prev.artworkRequired }))}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        formData.artworkRequired ? 'bg-cyan-500' : 'bg-white/10'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          formData.artworkRequired ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
                 </div>
+
+                {/* Artwork Management Section (only for existing quotes with artworkRequired) */}
+                {editingQuote && formData.artworkRequired && (
+                  <div className="bg-white/5 border border-white/10 rounded-lg p-4">
+                    <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+                      <ImageIcon className="w-4 h-4 text-cyan-400" />
+                      Artwork Management
+                    </h3>
+
+                    {editingQuote.artworkUrl ? (
+                      <div className="space-y-4">
+                        {/* Current Artwork */}
+                        <div className="flex items-start gap-4 p-3 bg-white/5 rounded-lg">
+                          <div className="flex-shrink-0 w-20 h-20 bg-white/10 rounded-lg overflow-hidden flex items-center justify-center">
+                            {editingQuote.artworkFileName?.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i) ? (
+                              <img
+                                src={editingQuote.artworkUrl}
+                                alt="Artwork preview"
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <FileText className="w-8 h-8 text-slate-400" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-white truncate">{editingQuote.artworkFileName}</p>
+                            <p className="text-xs text-slate-400">Version {editingQuote.artworkVersion}</p>
+                            {editingQuote.artworkSentAt && (
+                              <p className="text-xs text-slate-400">
+                                Sent: {new Date(editingQuote.artworkSentAt).toLocaleDateString()}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex-shrink-0 flex gap-2">
+                            <a
+                              href={editingQuote.artworkUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-2 bg-white/5 hover:bg-white/10 rounded-lg transition"
+                              title="View artwork"
+                            >
+                              <Eye className="w-4 h-4 text-slate-400" />
+                            </a>
+                            <button
+                              type="button"
+                              disabled={isSendingArtworkEmail}
+                              onClick={async () => {
+                                if (!editingQuote) return;
+                                const customerEmail = editingQuote.customer?.email || editingQuote.customerEmail;
+                                if (!customerEmail) {
+                                  setMessage({ type: 'error', text: 'No customer email available' });
+                                  return;
+                                }
+                                setIsSendingArtworkEmail(true);
+                                try {
+                                  const res = await fetch(`/api/admin/quotes/${editingQuote.id}/artwork`, {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ sendEmail: true }),
+                                  });
+                                  const data = await res.json();
+                                  if (!res.ok) {
+                                    throw new Error(data.error || 'Failed to send artwork email');
+                                  }
+                                  setMessage({ type: 'success', text: `Artwork sent to ${customerEmail}` });
+                                  // Update the editing quote with new data
+                                  setEditingQuote({
+                                    ...editingQuote,
+                                    artworkSentAt: data.data.artworkSentAt,
+                                    status: data.data.status,
+                                  });
+                                  // Refresh audit logs
+                                  await fetchAuditLogs(editingQuote.id);
+                                  await fetchData();
+                                } catch (error) {
+                                  setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Failed to send artwork email' });
+                                } finally {
+                                  setIsSendingArtworkEmail(false);
+                                }
+                              }}
+                              className="p-2 bg-cyan-500/20 hover:bg-cyan-500/30 rounded-lg transition disabled:opacity-50"
+                              title={editingQuote.artworkSentAt ? 'Resend artwork to customer' : 'Send artwork to customer'}
+                            >
+                              {isSendingArtworkEmail ? (
+                                <Loader2 className="w-4 h-4 text-cyan-400 animate-spin" />
+                              ) : (
+                                <Mail className="w-4 h-4 text-cyan-400" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Artwork Status */}
+                        {editingQuote.artworkApprovedAt && (
+                          <div className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+                            <CheckCircle className="w-5 h-5 text-green-400" />
+                            <div>
+                              <p className="text-sm font-medium text-green-400">Artwork Approved</p>
+                              <p className="text-xs text-green-400/70">
+                                {new Date(editingQuote.artworkApprovedAt).toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                        {editingQuote.artworkDeclinedAt && (
+                          <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg">
+                            <div className="flex items-center gap-2">
+                              <X className="w-5 h-5 text-rose-400" />
+                              <div>
+                                <p className="text-sm font-medium text-rose-400">Artwork Declined</p>
+                                <p className="text-xs text-rose-400/70">
+                                  {new Date(editingQuote.artworkDeclinedAt).toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
+                            {editingQuote.artworkNotes && (
+                              <p className="mt-2 text-sm text-rose-300 pl-7">
+                                &ldquo;{editingQuote.artworkNotes}&rdquo;
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Approval Link */}
+                        {editingQuote.artworkToken && editingQuote.artworkSentAt && (
+                          <div className="p-3 bg-white/5 rounded-lg">
+                            <p className="text-xs text-slate-400 mb-2">Customer Approval Link:</p>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                readOnly
+                                value={`${window.location.origin}/artwork/${editingQuote.artworkToken}`}
+                                className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded text-sm text-white"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(`${window.location.origin}/artwork/${editingQuote.artworkToken}`);
+                                  setMessage({ type: 'success', text: 'Link copied to clipboard' });
+                                }}
+                                className="p-2 bg-white/5 hover:bg-white/10 rounded transition"
+                                title="Copy link"
+                              >
+                                <Copy className="w-4 h-4 text-slate-400" />
+                              </button>
+                              <a
+                                href={`/artwork/${editingQuote.artworkToken}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-2 bg-white/5 hover:bg-white/10 rounded transition"
+                                title="Open approval page"
+                              >
+                                <ExternalLink className="w-4 h-4 text-slate-400" />
+                              </a>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowUploadNewVersion(!showUploadNewVersion)}
+                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 rounded-lg transition text-sm"
+                          >
+                            <Upload className="w-4 h-4" />
+                            Upload New Version
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!showVersionHistory) {
+                                fetchArtworkVersions(editingQuote.id);
+                              }
+                              setShowVersionHistory(!showVersionHistory);
+                            }}
+                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-lg transition text-sm"
+                          >
+                            <History className="w-4 h-4" />
+                            {showVersionHistory ? 'Hide History' : 'Version History'}
+                          </button>
+                        </div>
+
+                        {/* Upload New Version Form */}
+                        {showUploadNewVersion && (
+                          <div className="p-4 bg-white/5 border border-cyan-500/30 rounded-lg space-y-4">
+                            <h4 className="text-sm font-medium text-cyan-400">Upload New Artwork Version</h4>
+                            {!artworkFile ? (
+                              <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-white/20 rounded-lg cursor-pointer hover:border-cyan-500/50 hover:bg-white/5 transition">
+                                <div className="flex flex-col items-center justify-center py-4">
+                                  <Upload className="w-8 h-8 text-slate-500 mb-2" />
+                                  <p className="text-sm text-slate-400">
+                                    <span className="font-medium text-cyan-400">Click to upload</span>
+                                  </p>
+                                  <p className="text-xs text-slate-500">PNG, JPG, PDF, AI, EPS, SVG</p>
+                                </div>
+                                <input
+                                  type="file"
+                                  className="hidden"
+                                  accept="image/*,.pdf,.ai,.eps,.svg"
+                                  onChange={handleArtworkFileChange}
+                                />
+                              </label>
+                            ) : (
+                              <div className="space-y-3">
+                                <div className="flex items-start gap-3 p-3 bg-white/5 rounded-lg">
+                                  <div className="flex-shrink-0 w-16 h-16 bg-white/10 rounded-lg overflow-hidden flex items-center justify-center">
+                                    {artworkPreviewUrl ? (
+                                      <img src={artworkPreviewUrl} alt="Preview" className="w-full h-full object-cover" />
+                                    ) : (
+                                      <FileText className="w-8 h-8 text-slate-400" />
+                                    )}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-white truncate">{artworkFile.name}</p>
+                                    <p className="text-xs text-slate-400">{(artworkFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                                  </div>
+                                  <button type="button" onClick={clearArtworkFile} className="p-1 text-slate-400 hover:text-white">
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </div>
+                                <div className="flex gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={handleArtworkUpload}
+                                    disabled={isUploadingArtwork}
+                                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg transition disabled:opacity-50"
+                                  >
+                                    {isUploadingArtwork ? (
+                                      <><Loader2 className="w-4 h-4 animate-spin" /> Uploading...</>
+                                    ) : (
+                                      <><Upload className="w-4 h-4" /> Upload Version {editingQuote.artworkVersion + 1}</>
+                                    )}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => { clearArtworkFile(); setShowUploadNewVersion(false); }}
+                                    className="px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-400 rounded-lg transition"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Version History */}
+                        {showVersionHistory && (
+                          <div className="p-4 bg-white/5 border border-white/10 rounded-lg">
+                            <h4 className="text-sm font-medium text-white mb-3 flex items-center gap-2">
+                              <History className="w-4 h-4 text-slate-400" />
+                              Artwork Version History
+                            </h4>
+                            {isLoadingVersions ? (
+                              <div className="flex items-center justify-center py-4">
+                                <Loader2 className="w-5 h-5 animate-spin text-cyan-400" />
+                              </div>
+                            ) : artworkVersions.length === 0 ? (
+                              <p className="text-sm text-slate-400 text-center py-4">No version history available</p>
+                            ) : (
+                              <div className="space-y-2 max-h-60 overflow-y-auto">
+                                {artworkVersions.map((version) => (
+                                  <div
+                                    key={version.id}
+                                    className={`flex items-start gap-3 p-3 rounded-lg ${
+                                      version.isCurrent ? 'bg-cyan-500/10 border border-cyan-500/30' : 'bg-white/5'
+                                    }`}
+                                  >
+                                    <div className="flex-shrink-0 w-12 h-12 bg-white/10 rounded overflow-hidden flex items-center justify-center">
+                                      {version.fileName.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i) ? (
+                                        <img src={version.url} alt={`Version ${version.version}`} className="w-full h-full object-cover" />
+                                      ) : (
+                                        <FileText className="w-5 h-5 text-slate-400" />
+                                      )}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-sm font-medium text-white">v{version.version}</span>
+                                        {version.isCurrent && (
+                                          <span className="px-1.5 py-0.5 bg-cyan-500/20 text-cyan-400 text-xs rounded">Current</span>
+                                        )}
+                                        <span className={`px-1.5 py-0.5 text-xs rounded ${
+                                          version.status === 'APPROVED' ? 'bg-green-500/20 text-green-400' :
+                                          version.status === 'DECLINED' ? 'bg-rose-500/20 text-rose-400' :
+                                          version.status === 'SENT' ? 'bg-purple-500/20 text-purple-400' :
+                                          'bg-yellow-500/20 text-yellow-400'
+                                        }`}>
+                                          {version.status}
+                                        </span>
+                                      </div>
+                                      <p className="text-xs text-slate-400 truncate">{version.fileName}</p>
+                                      {version.customerNotes && (
+                                        <p className="text-xs text-rose-300 mt-1 italic">&ldquo;{version.customerNotes}&rdquo;</p>
+                                      )}
+                                    </div>
+                                    <a
+                                      href={version.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="p-1.5 bg-white/5 hover:bg-white/10 rounded transition"
+                                      title="View artwork"
+                                    >
+                                      <Eye className="w-3.5 h-3.5 text-slate-400" />
+                                    </a>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {/* File upload area */}
+                        {!artworkFile ? (
+                          <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-white/20 rounded-lg cursor-pointer hover:border-cyan-500/50 hover:bg-white/5 transition">
+                            <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                              <Upload className="w-10 h-10 text-slate-500 mb-3" />
+                              <p className="text-sm text-slate-400 mb-1">
+                                <span className="font-medium text-cyan-400">Click to upload</span> or drag and drop
+                              </p>
+                              <p className="text-xs text-slate-500">PNG, JPG, PDF, AI, EPS, SVG (max 25MB)</p>
+                            </div>
+                            <input
+                              type="file"
+                              className="hidden"
+                              accept="image/*,.pdf,.ai,.eps,.svg"
+                              onChange={handleArtworkFileChange}
+                            />
+                          </label>
+                        ) : (
+                          <div className="space-y-4">
+                            {/* Preview */}
+                            <div className="flex items-start gap-4 p-4 bg-white/5 rounded-lg border border-white/10">
+                              <div className="flex-shrink-0 w-24 h-24 bg-white/10 rounded-lg overflow-hidden flex items-center justify-center">
+                                {artworkPreviewUrl ? (
+                                  <img
+                                    src={artworkPreviewUrl}
+                                    alt="Artwork preview"
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <FileText className="w-10 h-10 text-slate-400" />
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-white truncate">{artworkFile.name}</p>
+                                <p className="text-xs text-slate-400 mt-1">
+                                  {(artworkFile.size / 1024 / 1024).toFixed(2)} MB
+                                </p>
+                                <p className="text-xs text-slate-500 mt-1">{artworkFile.type || 'Unknown type'}</p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={clearArtworkFile}
+                                className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition"
+                                title="Remove file"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+
+                            {/* Upload button */}
+                            <button
+                              type="button"
+                              onClick={handleArtworkUpload}
+                              disabled={isUploadingArtwork}
+                              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg transition disabled:opacity-50"
+                            >
+                              {isUploadingArtwork ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  Uploading...
+                                </>
+                              ) : (
+                                <>
+                                  <Upload className="w-4 h-4" />
+                                  Upload Artwork
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Pricing Summary */}
                 <div className="bg-white/5 border border-white/10 rounded-lg p-4">
@@ -1498,6 +2116,60 @@ export default function QuotesPage() {
                                 {/* Content */}
                                 <div className="flex-1 min-w-0">
                                   <p className="text-sm text-white">{log.description}</p>
+
+                                  {/* Artwork Details */}
+                                  {log.action.includes('ARTWORK') && log.newValue && (() => {
+                                    const newVal = log.newValue as Record<string, unknown>;
+                                    const fileName = newVal.artworkFileName ? String(newVal.artworkFileName) : null;
+                                    const version = newVal.artworkVersion ? String(newVal.artworkVersion) : null;
+                                    const url = newVal.artworkUrl ? String(newVal.artworkUrl) : null;
+                                    const notes = newVal.notes ? String(newVal.notes) : null;
+                                    return (
+                                      <div className="mt-2 p-2 bg-white/5 rounded-lg text-xs">
+                                        {fileName && (
+                                          <div className="flex items-center gap-2 text-slate-400">
+                                            <ImageIcon className="w-3 h-3" />
+                                            <span className="font-medium">File:</span>
+                                            <span className="text-slate-300">{fileName}</span>
+                                          </div>
+                                        )}
+                                        {version && (
+                                          <div className="flex items-center gap-2 text-slate-400 mt-1">
+                                            <span className="font-medium">Version:</span>
+                                            <span className="text-slate-300">{version}</span>
+                                          </div>
+                                        )}
+                                        {url && (
+                                          <div className="flex items-center gap-2 text-slate-400 mt-1">
+                                            <ExternalLink className="w-3 h-3" />
+                                            <a
+                                              href={url}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="text-cyan-400 hover:text-cyan-300 hover:underline truncate"
+                                            >
+                                              View uploaded file
+                                            </a>
+                                          </div>
+                                        )}
+                                        {notes && (
+                                          <div className="mt-1 text-slate-400">
+                                            <span className="font-medium">Notes:</span>
+                                            <span className="text-slate-300 ml-1">&ldquo;{notes}&rdquo;</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
+
+                                  {/* Previous value for updates */}
+                                  {log.action === 'ARTWORK_UPDATED' && log.previousValue && (
+                                    <div className="mt-1 text-xs text-slate-500">
+                                      <span>Previous: </span>
+                                      <span>{String((log.previousValue as Record<string, unknown>).artworkFileName || 'None')}</span>
+                                    </div>
+                                  )}
+
                                   <div className="flex items-center gap-2 mt-1 text-xs text-slate-500">
                                     <span>
                                       {log.actorType === 'ADMIN' && log.actorName
@@ -1525,6 +2197,11 @@ export default function QuotesPage() {
                                 {/* Action Badge */}
                                 <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${
                                   log.action.includes('CREATED') ? 'bg-green-500/20 text-green-400' :
+                                  log.action.includes('ARTWORK_UPLOADED') ? 'bg-cyan-500/20 text-cyan-400' :
+                                  log.action.includes('ARTWORK_UPDATED') ? 'bg-blue-500/20 text-blue-400' :
+                                  log.action.includes('ARTWORK_SENT') ? 'bg-purple-500/20 text-purple-400' :
+                                  log.action.includes('ARTWORK_APPROVED') ? 'bg-green-500/20 text-green-400' :
+                                  log.action.includes('ARTWORK_DECLINED') ? 'bg-red-500/20 text-red-400' :
                                   log.action.includes('SENT') ? 'bg-purple-500/20 text-purple-400' :
                                   log.action.includes('APPROVED') ? 'bg-green-500/20 text-green-400' :
                                   log.action.includes('DECLINED') ? 'bg-red-500/20 text-red-400' :

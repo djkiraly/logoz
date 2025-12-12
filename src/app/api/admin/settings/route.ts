@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { revalidateTag } from 'next/cache';
 import { z } from 'zod';
 import { prisma, isDatabaseEnabled } from '@/lib/prisma';
 import { getCurrentUser, logAuditEvent } from '@/lib/auth';
@@ -29,6 +30,7 @@ const settingsSchema = z.object({
   headerCtaEnabled: z.boolean().optional(),
   headerCtaLabel: z.string().max(50).optional().or(z.literal('')),
   headerCtaLink: z.string().max(200).optional().or(z.literal('')),
+  copyrightText: z.string().max(200).optional().or(z.literal('')),
   gcsConfig: gcsConfigSchema,
   // reCAPTCHA settings
   recaptchaEnabled: z.boolean().optional(),
@@ -122,6 +124,7 @@ export async function PUT(request: Request) {
       headerCtaEnabled: data.headerCtaEnabled !== undefined ? data.headerCtaEnabled : (existingSettings?.headerCtaEnabled ?? true),
       headerCtaLabel: getValue(data.headerCtaLabel, existingSettings?.headerCtaLabel, 'Build a design'),
       headerCtaLink: getValue(data.headerCtaLink, existingSettings?.headerCtaLink, '/design-studio'),
+      copyrightText: getValue(data.copyrightText, existingSettings?.copyrightText, 'Crafted in the cloud.'),
     };
 
     // Add gcsConfig if provided (only if field exists in schema)
@@ -183,6 +186,9 @@ export async function PUT(request: Request) {
       }
       throw dbError;
     }
+
+    // Revalidate cached site settings so public pages see the update immediately
+    revalidateTag('site-settings', 'max');
 
     // Log audit event
     const clientIp = getClientIp(request);

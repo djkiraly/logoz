@@ -87,6 +87,19 @@ export const ALLOWED_DOCUMENT_TYPES = [
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 ];
 
+// Artwork/design file types (for quotes artwork approval)
+export const ALLOWED_ARTWORK_TYPES = [
+  ...ALLOWED_IMAGE_TYPES,
+  'application/pdf',
+  'application/postscript', // AI/EPS files
+  'application/illustrator',
+  'application/x-illustrator',
+  'application/eps',
+  'application/x-eps',
+  'image/x-eps',
+  'image/eps',
+];
+
 export const ALLOWED_FILE_TYPES = [...ALLOWED_IMAGE_TYPES, ...ALLOWED_DOCUMENT_TYPES];
 
 // Max file sizes (in bytes)
