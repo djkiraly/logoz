@@ -11,6 +11,8 @@ export const siteSettings = {
   contactPhone: '+1 (402) 555-0199',
   address: '1420 Innovation Way, Omaha, NE 68102',
   announcement: 'Now booking Q1 experiential installs and NIL drops.',
+  faviconUrl: null,
+  logoUrl: null,
 };
 
 export const categories = [

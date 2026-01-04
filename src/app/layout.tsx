@@ -13,32 +13,36 @@ const display = Space_Grotesk({
   variable: '--font-display',
 });
 
-export const metadata: Metadata = {
-  metadataBase: new URL('https://logoz-cloud.vercel.app'),
-  title: {
-    default: 'Logoz Cloud Print Studio',
-    template: '%s | Logoz Cloud Print Studio',
-  },
-  description:
-    'A modern rushordertees-inspired storefront for on-demand apparel, embroidery, signage and premium merch programs.',
-  openGraph: {
-    title: 'Logoz Cloud Print Studio',
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await getSiteSettings();
+
+  return {
+    metadataBase: new URL('https://logoz-cloud.vercel.app'),
+    title: {
+      default: settings.siteName || 'Logoz Cloud Print Studio',
+      template: `%s | ${settings.siteName || 'Logoz Cloud Print Studio'}`,
+    },
     description:
-      'Design, source and fulfill custom merch, signage, embroidery and experiential installs from one dashboard.',
-    type: 'website',
-    url: 'https://logoz-cloud.vercel.app',
-    images: [
-      {
-        url: 'https://images.unsplash.com/photo-1489515217757-5fd1be406fef?auto=format&fit=crop&w=1200&q=80',
-        width: 1200,
-        height: 630,
-      },
-    ],
-  },
-  icons: {
-    icon: '/favicon.ico',
-  },
-};
+      'A modern rushordertees-inspired storefront for on-demand apparel, embroidery, signage and premium merch programs.',
+    openGraph: {
+      title: settings.siteName || 'Logoz Cloud Print Studio',
+      description:
+        'Design, source and fulfill custom merch, signage, embroidery and experiential installs from one dashboard.',
+      type: 'website',
+      url: 'https://logoz-cloud.vercel.app',
+      images: [
+        {
+          url: 'https://images.unsplash.com/photo-1489515217757-5fd1be406fef?auto=format&fit=crop&w=1200&q=80',
+          width: 1200,
+          height: 630,
+        },
+      ],
+    },
+    icons: {
+      icon: settings.faviconUrl || '/favicon.ico',
+    },
+  };
+}
 
 export default async function RootLayout({
   children,

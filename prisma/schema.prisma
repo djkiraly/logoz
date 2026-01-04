@@ -36,6 +36,8 @@ model SiteSetting {
   copyrightText    String  @default("Crafted in the cloud.")
   theme          Json?
   gcsConfig      Json?
+  faviconUrl     String?
+  logoUrl        String?
 
   // reCAPTCHA Configuration
   recaptchaEnabled   Boolean @default(false)

@@ -31,6 +31,8 @@ const settingsSchema = z.object({
   headerCtaLabel: z.string().max(50).optional().or(z.literal('')),
   headerCtaLink: z.string().max(200).optional().or(z.literal('')),
   copyrightText: z.string().max(200).optional().or(z.literal('')),
+  faviconUrl: z.string().max(500).nullable().optional(),
+  logoUrl: z.string().max(500).nullable().optional(),
   gcsConfig: gcsConfigSchema,
   // reCAPTCHA settings
   recaptchaEnabled: z.boolean().optional(),
@@ -158,6 +160,20 @@ export async function PUT(request: Request) {
       settingsData.recaptchaSecretKey = data.recaptchaSecretKey || null;
     } else if (existingSettings) {
       settingsData.recaptchaSecretKey = existingSettings.recaptchaSecretKey;
+    }
+
+    // Handle faviconUrl
+    if (data.faviconUrl !== undefined) {
+      settingsData.faviconUrl = data.faviconUrl;
+    } else if (existingSettings && 'faviconUrl' in existingSettings) {
+      settingsData.faviconUrl = existingSettings.faviconUrl;
+    }
+
+    // Handle logoUrl
+    if (data.logoUrl !== undefined) {
+      settingsData.logoUrl = data.logoUrl;
+    } else if (existingSettings && 'logoUrl' in existingSettings) {
+      settingsData.logoUrl = existingSettings.logoUrl;
     }
 
     console.log('[Settings API] Upserting with data keys:', Object.keys(settingsData));

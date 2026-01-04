@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Save, Loader2, AlertCircle, CheckCircle, Cloud, Eye, EyeOff, TestTube, Upload, Shield } from 'lucide-react';
+import { Save, Loader2, AlertCircle, CheckCircle, Cloud, Eye, EyeOff, TestTube, Upload, Shield, Image, X } from 'lucide-react';
 
 type SiteSettings = {
   siteName: string;
@@ -18,6 +18,8 @@ type SiteSettings = {
   headerCtaLabel: string;
   headerCtaLink: string;
   copyrightText: string;
+  faviconUrl: string | null;
+  logoUrl: string | null;
 };
 
 type GcsConfig = {
@@ -64,7 +66,13 @@ export default function SettingsPage() {
     headerCtaLabel: 'Build a design',
     headerCtaLink: '/design-studio',
     copyrightText: 'Crafted in the cloud.',
+    faviconUrl: null,
+    logoUrl: null,
   });
+  const [isUploadingFavicon, setIsUploadingFavicon] = useState(false);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const faviconInputRef = useRef<HTMLInputElement>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
   const [gcsConfig, setGcsConfig] = useState<GcsConfig>(emptyGcsConfig);
   const [recaptchaConfig, setRecaptchaConfig] = useState<RecaptchaConfig>(emptyRecaptchaConfig);
   const [showPrivateKey, setShowPrivateKey] = useState(false);
@@ -102,6 +110,8 @@ export default function SettingsPage() {
           headerCtaLabel: data.data.headerCtaLabel || 'Build a design',
           headerCtaLink: data.data.headerCtaLink || '/design-studio',
           copyrightText: data.data.copyrightText || 'Crafted in the cloud.',
+          faviconUrl: data.data.faviconUrl || null,
+          logoUrl: data.data.logoUrl || null,
         });
         if (data.data.gcsConfig) {
           setGcsConfig({
@@ -259,6 +269,114 @@ export default function SettingsPage() {
     setSettings((prev) => ({ ...prev, headerCtaEnabled: e.target.checked }));
   };
 
+  const handleFaviconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = ['image/x-icon', 'image/vnd.microsoft.icon', 'image/png', 'image/svg+xml', 'image/jpeg', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      setMessage({ type: 'error', text: 'Invalid file type. Please upload an ICO, PNG, SVG, JPEG, or WebP file.' });
+      return;
+    }
+
+    // Validate file size (max 1MB for favicons)
+    if (file.size > 1024 * 1024) {
+      setMessage({ type: 'error', text: 'File too large. Favicon must be under 1MB.' });
+      return;
+    }
+
+    setIsUploadingFavicon(true);
+    setMessage(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('folder', 'branding');
+
+      const response = await fetch('/api/admin/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to upload favicon');
+      }
+
+      setSettings((prev) => ({ ...prev, faviconUrl: data.data.url }));
+      setMessage({ type: 'success', text: 'Favicon uploaded! Click "Save Changes" to apply.' });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to upload favicon';
+      setMessage({ type: 'error', text: errorMessage });
+    } finally {
+      setIsUploadingFavicon(false);
+      if (faviconInputRef.current) {
+        faviconInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleRemoveFavicon = () => {
+    setSettings((prev) => ({ ...prev, faviconUrl: null }));
+    setMessage({ type: 'success', text: 'Favicon removed. Click "Save Changes" to apply.' });
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = ['image/png', 'image/svg+xml', 'image/jpeg', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      setMessage({ type: 'error', text: 'Invalid file type. Please upload a PNG, SVG, JPEG, or WebP file.' });
+      return;
+    }
+
+    // Validate file size (max 2MB for logos)
+    if (file.size > 2 * 1024 * 1024) {
+      setMessage({ type: 'error', text: 'File too large. Logo must be under 2MB.' });
+      return;
+    }
+
+    setIsUploadingLogo(true);
+    setMessage(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('folder', 'branding');
+
+      const response = await fetch('/api/admin/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to upload logo');
+      }
+
+      setSettings((prev) => ({ ...prev, logoUrl: data.data.url }));
+      setMessage({ type: 'success', text: 'Logo uploaded! Click "Save Changes" to apply.' });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to upload logo';
+      setMessage({ type: 'error', text: errorMessage });
+    } finally {
+      setIsUploadingLogo(false);
+      if (logoInputRef.current) {
+        logoInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleRemoveLogo = () => {
+    setSettings((prev) => ({ ...prev, logoUrl: null }));
+    setMessage({ type: 'success', text: 'Logo removed. Click "Save Changes" to apply.' });
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -365,6 +483,167 @@ export default function SettingsPage() {
             <p className="text-xs text-slate-500 mt-1">
               The message displayed in the announcement banner
             </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Branding */}
+      <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl">
+        <div className="p-5 border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+              <Image className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-white">Branding</h2>
+              <p className="text-sm text-slate-400">Customize your site&apos;s visual identity</p>
+            </div>
+          </div>
+        </div>
+        <div className="p-5 space-y-5">
+          {/* Favicon */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-3">
+              Favicon
+            </label>
+            <div className="flex items-start gap-4">
+              {/* Preview */}
+              <div className="flex-shrink-0">
+                <div className="w-16 h-16 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden">
+                  {settings.faviconUrl ? (
+                    <img
+                      src={settings.faviconUrl}
+                      alt="Current favicon"
+                      className="w-10 h-10 object-contain"
+                    />
+                  ) : (
+                    <div className="text-center">
+                      <Image className="w-6 h-6 text-slate-500 mx-auto" />
+                      <span className="text-xs text-slate-500 mt-1 block">Default</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Upload Controls */}
+              <div className="flex-1 space-y-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={faviconInputRef}
+                    type="file"
+                    accept=".ico,.png,.svg,.jpg,.jpeg,.webp,image/x-icon,image/vnd.microsoft.icon,image/png,image/svg+xml,image/jpeg,image/webp"
+                    onChange={handleFaviconUpload}
+                    className="hidden"
+                    id="favicon-upload"
+                  />
+                  <label
+                    htmlFor="favicon-upload"
+                    className={`flex items-center gap-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 cursor-pointer transition-colors ${
+                      isUploadingFavicon ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                  >
+                    {isUploadingFavicon ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Upload className="w-4 h-4" />
+                    )}
+                    {settings.faviconUrl ? 'Replace' : 'Upload'}
+                  </label>
+                  {settings.faviconUrl && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveFavicon}
+                      className="flex items-center gap-2 px-4 py-2 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/30 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500">
+                  Recommended: 32x32 or 64x64 pixels. Supports ICO, PNG, SVG, JPEG, WebP (max 1MB).
+                </p>
+                {!gcsConfig.enabled && (
+                  <p className="text-xs text-amber-400">
+                    Note: Enable Google Cloud Storage below to upload custom favicons.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Site Logo */}
+          <div className="pt-5 border-t border-white/10">
+            <label className="block text-sm font-medium text-slate-300 mb-3">
+              Site Logo
+            </label>
+            <p className="text-xs text-slate-500 mb-3">
+              Upload a logo to replace the site title in the header navigation.
+            </p>
+            <div className="flex items-start gap-4">
+              {/* Preview */}
+              <div className="flex-shrink-0">
+                <div className="w-32 h-16 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden">
+                  {settings.logoUrl ? (
+                    <img
+                      src={settings.logoUrl}
+                      alt="Current logo"
+                      className="max-w-full max-h-full object-contain"
+                    />
+                  ) : (
+                    <div className="text-center">
+                      <Image className="w-6 h-6 text-slate-500 mx-auto" />
+                      <span className="text-xs text-slate-500 mt-1 block">No logo</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Upload Controls */}
+              <div className="flex-1 space-y-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={logoInputRef}
+                    type="file"
+                    accept=".png,.svg,.jpg,.jpeg,.webp,image/png,image/svg+xml,image/jpeg,image/webp"
+                    onChange={handleLogoUpload}
+                    className="hidden"
+                    id="logo-upload"
+                  />
+                  <label
+                    htmlFor="logo-upload"
+                    className={`flex items-center gap-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 cursor-pointer transition-colors ${
+                      isUploadingLogo ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                  >
+                    {isUploadingLogo ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Upload className="w-4 h-4" />
+                    )}
+                    {settings.logoUrl ? 'Replace' : 'Upload'}
+                  </label>
+                  {settings.logoUrl && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveLogo}
+                      className="flex items-center gap-2 px-4 py-2 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/30 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500">
+                  Recommended: SVG or PNG with transparent background. Max height 125px in header. (max 2MB)
+                </p>
+                {!gcsConfig.enabled && (
+                  <p className="text-xs text-amber-400">
+                    Note: Enable Google Cloud Storage below to upload a custom logo.
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>

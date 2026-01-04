@@ -1,6 +1,17 @@
 # Logoz Cloud Print Studio
 
-Modern storefront modeled after rushordertees.com for a full-service custom print shop. The experience includes a marketing site, product catalog, design studio overview, supplier hub, resource center, and API endpoints backed by Prisma with PostgreSQL. Content automatically falls back to static fixtures so the UI works even before a database is connected.
+A comprehensive cloud-based custom print shop storefront modeled after rushordertees.com. Features a public-facing e-commerce site with product catalog, design studio, and quote system, plus a full admin dashboard for managing quotes, customers, products, analytics, and business operations.
+
+## Features
+
+- **Public Storefront**: Product catalog, services, supplier hub, design studio, resource center
+- **Quote System**: Complete quote lifecycle with pricing, line items, artwork approval, and audit trails
+- **Customer CRM**: Full customer management with status tracking (Lead → Prospect → Active → Churned)
+- **Admin Dashboard**: 16 admin pages for comprehensive business management
+- **Analytics Suite**: Session tracking, page views, product views, and quote funnel analytics
+- **Email Integration**: Gmail API for sending quotes and notifications
+- **File Storage**: Google Cloud Storage for artwork and file uploads
+- **Database-optional**: Works with static content when no database is configured
 
 ## Stack
 
@@ -8,9 +19,9 @@ Modern storefront modeled after rushordertees.com for a full-service custom prin
 - **Styling**: Tailwind CSS v4 (inline `@theme`) with glassmorphism-inspired UI kit
 - **Database**: Neon serverless PostgreSQL with Prisma ORM
 - **Validation**: Zod 4 for type-safe form validation
-- **State**: TanStack React Query for interactive quote forms
+- **State**: TanStack React Query for interactive forms
 - **Testing**: Vitest + React Testing Library
-- **API**: RESTful routes for products, services, suppliers, quotes, and settings
+- **API**: 47 RESTful routes for products, services, quotes, customers, analytics, and admin operations
 - **Deployment**: Docker + Caddy with automatic Let's Encrypt SSL
 
 ## Quick Start
@@ -140,51 +151,82 @@ When no database is configured, the UI serves curated static data. Once a databa
 ```
 logoz/
 ├── src/
-│   ├── app/                # Next.js App Router pages & API routes
-│   │   ├── api/            # REST API endpoints
-│   │   ├── about/          # About page
-│   │   ├── contact/        # Contact page
-│   │   ├── products/       # Products catalog
-│   │   ├── services/       # Services listing
-│   │   └── suppliers/      # Supplier hub
-│   ├── components/         # React components
-│   │   ├── forms/          # Form components
-│   │   ├── layout/         # Header, footer
-│   │   └── sections/       # Page sections
-│   ├── lib/                # Utilities & data layer
-│   │   ├── api-utils.ts    # API helpers
-│   │   ├── logger.ts       # Structured logging
-│   │   ├── prisma.ts       # Neon database client
-│   │   ├── rate-limit.ts   # Rate limiting
-│   │   ├── site-data.ts    # Data fetching with fallback
-│   │   └── validation.ts   # Zod schemas
-│   └── test/               # Test utilities
+│   ├── app/                    # Next.js App Router
+│   │   ├── api/                # 47 REST API endpoints
+│   │   │   ├── admin/          # Admin endpoints (auth, quotes, customers, etc.)
+│   │   │   ├── analytics/      # Tracking endpoints (pageviews, funnels)
+│   │   │   ├── artwork/        # Customer artwork approval
+│   │   │   ├── quote/          # Public quote viewing by token
+│   │   │   └── [public]        # Products, services, suppliers, settings
+│   │   ├── admin/              # 16 admin pages (protected)
+│   │   │   ├── analytics/      # Analytics dashboard
+│   │   │   ├── customers/      # Customer CRM
+│   │   │   ├── quotes/         # Quote management
+│   │   │   ├── products/       # Product catalog
+│   │   │   └── [other admin]   # Users, vendors, settings, etc.
+│   │   ├── artwork/[token]/    # Customer artwork approval page
+│   │   ├── quote/[token]/      # Customer quote viewing page
+│   │   └── [public pages]      # About, contact, products, services, etc.
+│   ├── components/             # React components
+│   │   ├── admin/              # Admin-specific components
+│   │   ├── analytics/          # Analytics tracking
+│   │   ├── forms/              # Form components
+│   │   ├── layout/             # Header, footer
+│   │   └── sections/           # Page sections
+│   ├── lib/                    # Utilities & services
+│   │   ├── analytics.ts        # Analytics tracking
+│   │   ├── auth.ts             # Admin authentication
+│   │   ├── gcs.ts              # Google Cloud Storage
+│   │   ├── gmail.ts            # Gmail API
+│   │   ├── notifications.ts    # Email/SMS notifications
+│   │   ├── quote-audit.ts      # Quote audit trail
+│   │   └── [other utils]       # Validation, logging, rate-limit, etc.
+│   └── middleware.ts           # Auth & analytics middleware
 ├── prisma/
-│   ├── schema.prisma       # Database schema
-│   └── seed.ts             # Seed script
-├── deploy/                 # Deployment configurations
-│   ├── Caddyfile           # Caddy reverse proxy config
-│   └── setup-ssl.sh        # SSL setup helper script
-├── Dockerfile              # Container build
-├── docker-compose.yml      # Full stack deployment
-└── public/                 # Static assets
+│   ├── schema.prisma           # Database schema (30+ models)
+│   └── seed.ts                 # Seed script
+├── deploy/                     # Deployment configurations
+│   ├── Caddyfile               # Caddy reverse proxy config
+│   └── setup-ssl.sh            # SSL setup helper script
+├── Dockerfile                  # Container build
+├── docker-compose.yml          # Full stack deployment
+└── public/                     # Static assets
 ```
 
 ## API Endpoints
 
+### Public Endpoints
 | Endpoint | Method | Description | Cache |
 | --- | --- | --- | --- |
 | `/api/products` | GET | List products | 5 min |
 | `/api/services` | GET | List services | 10 min |
 | `/api/suppliers` | GET | List suppliers | 10 min |
 | `/api/settings` | GET | Site settings | 30 min |
-| `/api/quotes` | GET | List quote requests | None |
 | `/api/quotes` | POST | Submit quote request | N/A |
+| `/api/quote/[token]` | GET | View quote by token | None |
+| `/api/artwork/[token]` | GET | View artwork for approval | None |
+| `/api/analytics/*` | POST | Track pageviews/events | N/A |
+
+### Admin Endpoints (47 total, requires authentication)
+| Endpoint | Description |
+| --- | --- |
+| `/api/admin/auth/*` | Login, logout, password reset, email verification |
+| `/api/admin/quotes/*` | Quote CRUD, send, artwork upload, audit trail |
+| `/api/admin/customers/*` | Customer CRM operations |
+| `/api/admin/products/*` | Product management |
+| `/api/admin/services/*` | Service management |
+| `/api/admin/vendors/*` | Supplier management |
+| `/api/admin/users/*` | Admin user management |
+| `/api/admin/settings` | Site configuration |
+| `/api/admin/notifications/*` | Email/notification setup |
+| `/api/admin/analytics` | Dashboard analytics data |
+| `/api/admin/upload` | File upload to GCS |
 
 The quote POST endpoint includes:
 - Rate limiting (5 requests/hour per IP)
 - Input validation via Zod
 - Duplicate detection (5-minute window)
+- Optional reCAPTCHA protection
 
 ## Deployment
 
@@ -357,15 +399,31 @@ Current test coverage includes:
 - Input validation (46 tests)
 - Rate limiting (13 tests)
 
-## Features
+## Admin Dashboard
 
-- **Database-optional**: Works with static content when no database is configured
-- **Rate limiting**: Protects quote API from abuse
-- **Error boundaries**: Graceful error handling throughout
-- **Loading states**: Skeleton loaders for all routes
-- **Accessibility**: ARIA labels, focus management, screen reader support
-- **Caching**: ISR and HTTP cache headers on API routes
-- **Structured logging**: Consistent, parseable logs
+Access the admin panel at `/admin` (requires authentication). Features include:
+
+- **Dashboard**: Overview of recent activity and key metrics
+- **Quotes**: Full quote lifecycle management with audit trail
+- **Customers**: CRM with status tracking and history
+- **Products**: Product catalog with variants and inventory
+- **Services**: Service offerings management
+- **Vendors**: Supplier management
+- **Analytics**: Traffic, conversions, and funnel analysis
+- **Users**: Admin user management with roles (Super Admin, Admin, Editor)
+- **Settings**: Site configuration and branding
+- **Notifications**: Email templates and Gmail integration
+
+## Security
+
+- **Admin Authentication**: Session-based with JWT-like tokens
+- **Middleware Protection**: Admin routes require valid session
+- **Rate Limiting**: Protects public endpoints from abuse
+- **Input Validation**: Zod schemas on all submissions
+- **reCAPTCHA**: Optional spam protection
+- **Email Verification**: Required for new admin accounts
+- **Password Reset**: Token-based with expiry
+- **Audit Logging**: All quote changes tracked with actor info
 
 ## Contributing
 

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useState } from 'react';
 import { Menu, X } from 'lucide-react';
 import type { SiteSettings } from '@/lib/site-data';
@@ -28,8 +29,22 @@ export function SiteHeader({ settings }: SiteHeaderProps) {
         </div>
       ) : null}
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-4">
-        <Link href="/" className="text-lg font-semibold tracking-tight">
-          {settings.siteName ?? 'Logoz Custom'}
+        <Link href="/" className="flex items-center">
+          {settings.logoUrl && settings.logoUrl.length > 0 ? (
+            <Image
+              src={settings.logoUrl}
+              alt={settings.siteName || 'Logo'}
+              width={200}
+              height={125}
+              className="max-h-[125px] w-auto object-contain"
+              unoptimized
+              priority
+            />
+          ) : (
+            <span className="text-lg font-semibold tracking-tight">
+              {settings.siteName || 'Logoz Custom'}
+            </span>
+          )}
         </Link>
         <nav className="hidden items-center gap-6 text-sm font-medium text-white/80 lg:flex">
           {navigation.map((item) => (

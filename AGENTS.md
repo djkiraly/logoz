@@ -4,10 +4,14 @@ This document provides context and guidelines for AI agents assisting with devel
 
 ## Project Overview
 
-**Logoz Cloud Print Studio** is a modern full-service custom print shop storefront built with Next.js 16, React 19, and TypeScript. It includes a marketing site, product catalog, design studio, supplier hub, and quote request system.
+**Logoz Cloud Print Studio** is a comprehensive cloud-based custom print shop storefront modeled after rushordertees.com. It combines a public-facing e-commerce storefront with an extensive admin dashboard for managing products, quotes, customers, and analytics. Built with Next.js 16, React 19, and TypeScript.
 
 ### Key Characteristics
-- **Database-optional**: The app works without a database using static fallback content
+- **Full Admin Dashboard**: 16 admin pages for managing quotes, customers, products, analytics, and settings
+- **Complete Quote System**: Full quote lifecycle with pricing, line items, artwork approval, and audit trails
+- **Customer CRM**: Customer management with status tracking (Lead → Prospect → Active → Churned)
+- **Analytics Suite**: Session tracking, page views, product views, and quote funnel analytics
+- **Database-optional**: Works without a database using static fallback content
 - **Server Components First**: Leverages React Server Components for data fetching
 - **Glassmorphism UI**: Dark theme with frosted glass effects
 - **Type-safe**: End-to-end TypeScript with Zod validation
@@ -21,60 +25,110 @@ This document provides context and guidelines for AI agents assisting with devel
 | Language | TypeScript | 5.x |
 | Styling | Tailwind CSS | 4.x |
 | Database ORM | Prisma | 6.x |
-| Database | PostgreSQL | - |
+| Database | Neon Serverless PostgreSQL | - |
 | Validation | Zod | 4.x |
 | State Management | TanStack React Query | 5.x |
 | Testing | Vitest + React Testing Library | 4.x |
 | Icons | Lucide React | 0.553.x |
+| File Storage | Google Cloud Storage | - |
+| Email | Gmail API | - |
+| Deployment | Docker + Caddy | - |
 
 ## Project Structure
 
 ```
-web/
+logoz/
 ├── src/
-│   ├── app/                    # Next.js App Router pages and API routes
-│   │   ├── api/                # API endpoints
-│   │   │   ├── products/       # GET /api/products
-│   │   │   ├── quotes/         # GET, POST /api/quotes
-│   │   │   ├── services/       # GET /api/services
-│   │   │   ├── settings/       # GET /api/settings
-│   │   │   └── suppliers/      # GET /api/suppliers
-│   │   ├── about/
-│   │   ├── contact/
-│   │   ├── design-studio/
-│   │   ├── products/
-│   │   ├── resources/
-│   │   ├── services/
-│   │   ├── suppliers/
-│   │   ├── error.tsx           # Error boundary
-│   │   ├── global-error.tsx    # Root error handler
-│   │   ├── layout.tsx          # Root layout
-│   │   ├── loading.tsx         # Loading skeleton
-│   │   ├── not-found.tsx       # 404 page
-│   │   └── page.tsx            # Homepage
+│   ├── app/                        # Next.js App Router
+│   │   ├── api/                    # 47 API routes
+│   │   │   ├── admin/              # Admin-only endpoints
+│   │   │   │   ├── auth/           # Login, logout, password reset, email verification
+│   │   │   │   ├── analytics/      # Admin analytics dashboard data
+│   │   │   │   ├── categories/     # Category CRUD
+│   │   │   │   ├── customers/      # Customer CRM endpoints
+│   │   │   │   ├── notifications/  # Email/notification configuration
+│   │   │   │   ├── products/       # Product management
+│   │   │   │   ├── quotes/         # Quote management with audit trail
+│   │   │   │   ├── services/       # Service management
+│   │   │   │   ├── settings/       # Site settings
+│   │   │   │   ├── upload/         # File upload to GCS
+│   │   │   │   ├── users/          # Admin user management
+│   │   │   │   └── vendors/        # Supplier management
+│   │   │   ├── analytics/          # Public tracking (pageviews, product views, funnels)
+│   │   │   ├── artwork/            # Customer artwork approval
+│   │   │   ├── quote/              # Public quote viewing by token
+│   │   │   ├── products/           # GET /api/products (5 min cache)
+│   │   │   ├── services/           # GET /api/services (10 min cache)
+│   │   │   ├── suppliers/          # GET /api/suppliers (10 min cache)
+│   │   │   └── settings/           # GET /api/settings (30 min cache)
+│   │   ├── admin/                  # 16 admin pages (protected)
+│   │   │   ├── analytics/          # Analytics dashboard
+│   │   │   ├── appearance/         # Site customization
+│   │   │   ├── customers/          # Customer CRM
+│   │   │   ├── login/              # Admin login
+│   │   │   ├── notifications/      # Email/notification settings
+│   │   │   ├── products/           # Product catalog management
+│   │   │   ├── quotes/             # Quote management (core feature)
+│   │   │   ├── services/           # Service listing management
+│   │   │   ├── settings/           # Site settings
+│   │   │   ├── users/              # Admin user management
+│   │   │   ├── vendors/            # Supplier management
+│   │   │   └── page.tsx            # Admin dashboard
+│   │   ├── about/                  # About page
+│   │   ├── artwork/[token]/        # Customer artwork approval
+│   │   ├── contact/                # Contact page
+│   │   ├── design-studio/          # Design studio interface
+│   │   ├── products/               # Product catalog
+│   │   ├── quote/[token]/          # Customer quote viewing/approval
+│   │   ├── resources/              # Resource center
+│   │   ├── services/               # Services listing
+│   │   ├── suppliers/              # Supplier hub
+│   │   ├── error.tsx               # Error boundary
+│   │   ├── global-error.tsx        # Root error handler
+│   │   ├── layout.tsx              # Root layout with providers
+│   │   ├── loading.tsx             # Loading skeleton
+│   │   ├── not-found.tsx           # 404 page
+│   │   └── page.tsx                # Homepage
 │   ├── components/
-│   │   ├── forms/              # Form components (quote-form.tsx)
-│   │   ├── layout/             # Header, footer
-│   │   ├── sections/           # Page sections (hero, testimonials, etc.)
-│   │   └── providers.tsx       # React Query provider
+│   │   ├── admin/                  # Admin-specific components (tables, forms, dialogs)
+│   │   ├── analytics/              # Analytics tracking components
+│   │   ├── forms/                  # Form components (quote-form.tsx)
+│   │   ├── layout/                 # Header, footer, navigation
+│   │   ├── sections/               # Page sections (hero, testimonials, etc.)
+│   │   └── providers.tsx           # Context providers (QueryClient, etc.)
 │   ├── lib/
-│   │   ├── api-utils.ts        # API error handling, caching utilities
-│   │   ├── constants.ts        # Fulfillment method constants
-│   │   ├── logger.ts           # Structured logging utility
-│   │   ├── prisma.ts           # Prisma client singleton
-│   │   ├── rate-limit.ts       # Rate limiting for API routes
-│   │   ├── site-data.ts        # Data access layer with fallback
-│   │   ├── static-content.ts   # Static fallback data
-│   │   └── validation.ts       # Zod schemas for forms
+│   │   ├── analytics.ts            # Analytics session, tracking, aggregation
+│   │   ├── api-utils.ts            # API response helpers, error handling
+│   │   ├── auth.ts                 # Session verification, admin auth
+│   │   ├── constants.ts            # Fulfillment method constants
+│   │   ├── email-verification.ts   # Email verification tokens
+│   │   ├── gcs.ts                  # Google Cloud Storage integration
+│   │   ├── gmail.ts                # Gmail API for notifications
+│   │   ├── logger.ts               # Structured logging utility
+│   │   ├── notifications.ts        # Email/SMS notification system
+│   │   ├── password-reset.ts       # Password reset flows
+│   │   ├── prisma.ts               # Prisma client singleton
+│   │   ├── quote-audit.ts          # Quote audit trail logging
+│   │   ├── rate-limit.ts           # Rate limiting for API routes
+│   │   ├── recaptcha.ts            # reCAPTCHA verification
+│   │   ├── site-data.ts            # Data access layer with fallback
+│   │   ├── static-content.ts       # Static fallback data
+│   │   └── validation.ts           # Zod schemas for forms
+│   ├── middleware.ts               # Auth protection, analytics tracking
 │   └── test/
-│       ├── setup.ts            # Vitest setup
-│       └── test-utils.tsx      # Testing utilities
+│       ├── setup.ts                # Vitest setup
+│       └── test-utils.tsx          # Testing utilities
 ├── prisma/
-│   ├── schema.prisma           # Database schema
-│   └── seed.ts                 # Database seeding script
-├── public/                     # Static assets
-├── .env.example                # Environment variable template
-├── vitest.config.ts            # Test configuration
+│   ├── schema.prisma               # Database schema (30+ models)
+│   └── seed.ts                     # Database seeding script
+├── deploy/
+│   ├── Caddyfile                   # Caddy reverse proxy with SSL
+│   └── setup-ssl.sh                # SSL setup helper
+├── public/                         # Static assets
+├── Dockerfile                      # Multi-stage Docker build
+├── docker-compose.yml              # Full stack deployment
+├── .env.example                    # Environment variable template
+├── vitest.config.ts                # Test configuration
 └── package.json
 ```
 
@@ -188,15 +242,47 @@ export default function Error({ error, reset }: { error: Error; reset: () => voi
 
 ## Database Schema
 
-Key models in `prisma/schema.prisma`:
+Key models in `prisma/schema.prisma` (30+ models):
 
-- **SiteSetting** - Global site configuration (singleton)
+### Core Business Models
+- **SiteSetting** - Global site configuration (theme, branding, reCAPTCHA)
 - **Category** - Product/service categories
-- **Supplier** - Fulfillment partners
-- **Product** - Print products with variants
-- **Service** - Fulfillment services (embroidery, screen print, etc.)
-- **QuoteRequest** - Customer quote submissions
-- **Testimonial**, **Faq**, **Design**, **Collection**
+- **Supplier** - Vendor/supplier information
+- **Product** - Product catalog with variants, pricing, fulfillment methods
+- **Variant** - Product color/size variants with inventory
+- **Service** - Service offerings (screen print, embroidery, etc.)
+- **Collection** - Themed product collections
+
+### Quote Management (Primary Feature)
+- **QuoteRequest** - Customer quote requests from public form
+- **Quote** - Internal admin-generated quotes with pricing and line items
+- **QuoteLineItem** - Individual items in a quote
+- **ArtworkVersion** - Version history for artwork revisions
+- **QuoteAuditLog** - Complete audit trail of all quote changes
+
+### Customer Relationship
+- **Customer** - Full CRM with contact info, company data, status tracking
+- **CustomerStatus** (enum): LEAD, PROSPECT, ACTIVE, INACTIVE, CHURNED
+- **CustomerType** (enum): INDIVIDUAL, BUSINESS, NONPROFIT, GOVERNMENT, EDUCATION
+
+### Admin & Authentication
+- **AdminUser** - Admin account with role-based access
+- **AdminSession** - Session tracking with token management
+- **AdminRole** (enum): SUPER_ADMIN, ADMIN, EDITOR
+- **AuditLog** - Administrative action tracking
+
+### Analytics (5 models)
+- **PageView** - Individual page visit tracking
+- **AnalyticsSession** - Session-level metrics (source, duration, conversion)
+- **ProductView** - Product page visit tracking
+- **QuoteFunnelEvent** - Quote conversion funnel tracking
+- **DailyAnalytics** - Pre-aggregated daily metrics for fast queries
+
+### Notifications
+- **NotificationSetting** - Email/SMS notification templates
+- **NotificationLog** - Sent notification history
+- **EmailConfig** - Gmail API configuration
+- **SmsConfig** - SMS provider configuration (Twilio)
 
 ### Fulfillment Methods (Enum)
 ```
@@ -205,7 +291,7 @@ EMBROIDERY, SCREEN_PRINT, DTG, VINYL, SUBLIMATION, LASER, PROMO
 
 ### Quote Status (Enum)
 ```
-PENDING, REVIEWING, SENT, APPROVED, ARCHIVED
+PENDING, REVIEWING, SENT, ARTWORK_PENDING, ARTWORK_APPROVED, ARTWORK_DECLINED, APPROVED, DECLINED, ARCHIVED
 ```
 
 ## Development Commands
@@ -243,8 +329,61 @@ See `.env.example` for all available variables:
 | `DIRECT_URL` | For migrations | Neon direct connection (bypasses pooler) |
 | `SHADOW_DATABASE_URL` | For migrations | Shadow database for Prisma |
 | `NEXT_PUBLIC_SITE_NAME` | No | Site title override |
+| `NEXT_PUBLIC_SITE_URL` | No | Public URL (client-side) |
+| `SITE_URL` | No | Server-side URL |
 | `ADMIN_CONTACT_EMAIL` | No | Admin notification email |
 | `LOG_LEVEL` | No | Logging level (debug, info, warn, error) |
+| `PORT` | No | Server port (default 3000) |
+
+### Optional Services
+| Variable | Description |
+|----------|-------------|
+| `UPSTASH_REDIS_REST_URL` | Redis for distributed rate limiting |
+| `UPSTASH_REDIS_REST_TOKEN` | Redis authentication token |
+| `GCS_BUCKET_NAME` | Google Cloud Storage bucket for file uploads |
+| `GCS_PROJECT_ID` | GCS project ID |
+| `GCS_CLIENT_EMAIL` | GCS service account email |
+| `GCS_PRIVATE_KEY` | GCS service account private key |
+| `GMAIL_CLIENT_ID` | Gmail OAuth client ID |
+| `GMAIL_CLIENT_SECRET` | Gmail OAuth client secret |
+| `GMAIL_REFRESH_TOKEN` | Gmail OAuth refresh token |
+
+## Critical Feature: Quote System & Audit Trail
+
+**IMPORTANT**: When modifying quote functionality, ALWAYS update the audit trail piece as well.
+
+### Quote Lifecycle
+1. Customer submits `QuoteRequest` via public form
+2. Admin creates `Quote` with pricing and line items
+3. Admin uploads artwork (`ArtworkVersion`)
+4. Quote sent to customer via email with unique token
+5. Customer views/approves quote at `/quote/[token]`
+6. Customer approves artwork at `/artwork/[token]`
+
+### Audit Trail Pattern
+Every quote change must be logged via `src/lib/quote-audit.ts`:
+
+```typescript
+import { logQuoteAudit } from '@/lib/quote-audit';
+
+// Log quote changes
+await logQuoteAudit({
+  quoteId: quote.id,
+  action: 'STATUS_CHANGE',
+  performedBy: adminUser.id,
+  previousValue: { status: 'PENDING' },
+  newValue: { status: 'SENT' },
+  notes: 'Quote sent to customer',
+});
+```
+
+### Quote Status Flow
+```
+PENDING → REVIEWING → SENT → ARTWORK_PENDING → ARTWORK_APPROVED → APPROVED
+                                            ↘ ARTWORK_DECLINED
+                         ↘ DECLINED
+                         ↘ ARCHIVED
+```
 
 ## Coding Guidelines
 
@@ -339,11 +478,29 @@ npm run test:run -- --reporter=verbose  # Verbose output
 
 ## Security Considerations
 
-- Rate limiting is enabled on `/api/quotes` (5 requests/hour per IP)
-- Input validation via Zod on all form submissions
-- XSS protection via `containsSuspiciousContent()` helper
-- CORS validation in production via `validateRequest()`
-- Sensitive data should never be logged (emails are partially logged)
+- **Admin Authentication**: Session-based auth with tokens stored in `AdminSession`
+- **Middleware Protection**: Admin routes protected via `src/middleware.ts`
+- **Rate Limiting**: 5 requests/hour per IP on `/api/quotes`
+- **Input Validation**: Zod schemas on all form submissions
+- **XSS Protection**: `containsSuspiciousContent()` helper
+- **CORS Validation**: Production validation via `validateRequest()`
+- **reCAPTCHA**: Optional spam protection (configurable in settings)
+- **Email Verification**: Required for new admin accounts
+- **Password Reset**: Token-based flow with expiry
+- **Sensitive Data**: Never logged (emails partially masked)
+
+### Admin Auth Pattern
+```typescript
+import { verifySession } from '@/lib/auth';
+
+export async function GET(request: Request) {
+  const session = await verifySession(request);
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  // session.user contains admin user info
+}
+```
 
 ## Performance Optimizations
 
@@ -352,9 +509,34 @@ npm run test:run -- --reporter=verbose  # Verbose output
 - Database indexes on frequently queried fields
 - LRU cache for rate limiting
 - Stale-while-revalidate caching headers
+- Daily analytics pre-aggregation for fast dashboard queries
+
+## Analytics System
+
+The analytics system tracks user behavior across the storefront:
+
+### Tracking Components
+- `src/lib/analytics.ts` - Core analytics functions
+- `src/components/analytics/` - Tracking components
+- `src/middleware.ts` - Session initialization
+
+### Events Tracked
+1. **PageView** - Every page visit with duration, scroll depth
+2. **ProductView** - Product page visits with conversion tracking
+3. **QuoteFunnelEvent** - Quote conversion funnel stages:
+   - `VIEWED` → `STARTED` → `ADDED_ITEMS` → `SUBMITTED` → `SENT` → `APPROVED`
+
+### Analytics Dashboard
+Admin dashboard at `/admin/analytics` displays:
+- Daily/weekly/monthly traffic
+- Top products by views
+- Quote funnel conversion rates
+- Traffic sources (UTM parameters)
+- Device/browser breakdown
 
 ## Contact & Resources
 
 - **Documentation**: This file + inline code comments
 - **Design System**: See `src/app/globals.css` for CSS variables
 - **Icons**: https://lucide.dev/icons (use `lucide-react`)
+- **Admin Panel**: `/admin` (requires authentication)
