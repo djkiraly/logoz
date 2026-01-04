@@ -24,7 +24,10 @@ export function middleware(request: NextRequest) {
       if (sessionToken && pathname === '/admin/login') {
         return NextResponse.redirect(new URL('/admin', request.url));
       }
-      return NextResponse.next();
+      // Set pathname header for admin detection in root layout
+      const response = NextResponse.next();
+      response.headers.set('x-pathname', pathname);
+      return response;
     }
 
     // Protect all other admin routes
@@ -33,6 +36,11 @@ export function middleware(request: NextRequest) {
       loginUrl.searchParams.set('redirect', pathname);
       return NextResponse.redirect(loginUrl);
     }
+
+    // Set pathname header for admin detection in root layout
+    const response = NextResponse.next();
+    response.headers.set('x-pathname', pathname);
+    return response;
   }
 
   // Track page views for analytics (non-admin, non-API routes)

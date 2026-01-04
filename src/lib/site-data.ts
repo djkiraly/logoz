@@ -45,6 +45,12 @@ export type SiteSettings = {
   copyrightText: string;
   faviconUrl?: string | null;
   logoUrl?: string | null;
+  // Hero Video Intro
+  heroVideoEnabled: boolean;
+  heroVideoUrl?: string | null;
+  heroVideoAutoplay: boolean;
+  heroVideoMuted: boolean;
+  heroVideoDuration?: number | null;
 };
 
 const normalizeSettings = (settings: Partial<SiteSettings>): SiteSettings => ({
@@ -64,6 +70,12 @@ const normalizeSettings = (settings: Partial<SiteSettings>): SiteSettings => ({
   copyrightText: settings.copyrightText ?? 'Crafted in the cloud.',
   faviconUrl: settings.faviconUrl ?? null,
   logoUrl: settings.logoUrl ?? null,
+  // Hero Video Intro
+  heroVideoEnabled: settings.heroVideoEnabled ?? false,
+  heroVideoUrl: settings.heroVideoUrl ?? null,
+  heroVideoAutoplay: settings.heroVideoAutoplay ?? true,
+  heroVideoMuted: settings.heroVideoMuted ?? true,
+  heroVideoDuration: settings.heroVideoDuration ?? null,
 });
 
 export const getSiteSettings = cache(async () => {

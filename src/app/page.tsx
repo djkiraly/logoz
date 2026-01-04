@@ -1,4 +1,4 @@
-import { HeroSection } from '@/components/sections/hero-section';
+import { HeroWithVideo } from '@/components/sections/hero-with-video';
 import { CategoryRail } from '@/components/sections/category-rail';
 import { ProductShowcase } from '@/components/sections/product-showcase';
 import { SupplierMarquee } from '@/components/sections/supplier-marquee';
@@ -30,7 +30,7 @@ export default async function Home() {
 
   return (
     <>
-      <HeroSection settings={snapshot.settings} stats={snapshot.stats} />
+      <HeroWithVideo settings={snapshot.settings} stats={snapshot.stats} />
       <CategoryRail categories={categories} />
       <ProductShowcase products={products} />
       <SupplierMarquee suppliers={suppliers} />

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Save, Loader2, AlertCircle, CheckCircle, Cloud, Eye, EyeOff, TestTube, Upload, Shield, Image, X } from 'lucide-react';
+import { Save, Loader2, AlertCircle, CheckCircle, Cloud, Eye, EyeOff, TestTube, Upload, Shield, Image, X, Video, Play } from 'lucide-react';
 
 type SiteSettings = {
   siteName: string;
@@ -20,6 +20,12 @@ type SiteSettings = {
   copyrightText: string;
   faviconUrl: string | null;
   logoUrl: string | null;
+  // Hero Video Intro
+  heroVideoEnabled: boolean;
+  heroVideoUrl: string | null;
+  heroVideoAutoplay: boolean;
+  heroVideoMuted: boolean;
+  heroVideoDuration: number | null;
 };
 
 type GcsConfig = {
@@ -68,6 +74,12 @@ export default function SettingsPage() {
     copyrightText: 'Crafted in the cloud.',
     faviconUrl: null,
     logoUrl: null,
+    // Hero Video Intro
+    heroVideoEnabled: false,
+    heroVideoUrl: null,
+    heroVideoAutoplay: true,
+    heroVideoMuted: true,
+    heroVideoDuration: null,
   });
   const [isUploadingFavicon, setIsUploadingFavicon] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
@@ -112,6 +124,12 @@ export default function SettingsPage() {
           copyrightText: data.data.copyrightText || 'Crafted in the cloud.',
           faviconUrl: data.data.faviconUrl || null,
           logoUrl: data.data.logoUrl || null,
+          // Hero Video Intro
+          heroVideoEnabled: data.data.heroVideoEnabled ?? false,
+          heroVideoUrl: data.data.heroVideoUrl || null,
+          heroVideoAutoplay: data.data.heroVideoAutoplay ?? true,
+          heroVideoMuted: data.data.heroVideoMuted ?? true,
+          heroVideoDuration: data.data.heroVideoDuration || null,
         });
         if (data.data.gcsConfig) {
           setGcsConfig({
@@ -771,6 +789,130 @@ export default function SettingsPage() {
                 placeholder="/products"
               />
             </div>
+          </div>
+
+          {/* Video Intro Section */}
+          <div className="pt-5 border-t border-white/10">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center">
+                <Video className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h3 className="text-md font-semibold text-white">Video Intro</h3>
+                <p className="text-xs text-slate-400">Display a video animation before the hero content</p>
+              </div>
+            </div>
+
+            {/* Enable Video Toggle */}
+            <div className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-lg mb-4">
+              <div>
+                <p className="text-sm font-medium text-slate-300">Enable Video Intro</p>
+                <p className="text-xs text-slate-500">
+                  When enabled, a video will play once before revealing the hero
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={settings.heroVideoEnabled}
+                  onChange={(e) => setSettings((prev) => ({ ...prev, heroVideoEnabled: e.target.checked }))}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-cyan-500/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-500"></div>
+              </label>
+            </div>
+
+            {/* Video URL */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Video URL
+              </label>
+              <input
+                type="text"
+                name="heroVideoUrl"
+                value={settings.heroVideoUrl || ''}
+                onChange={(e) => setSettings((prev) => ({ ...prev, heroVideoUrl: e.target.value || null }))}
+                disabled={!settings.heroVideoEnabled}
+                className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                placeholder="https://www.youtube.com/embed/VIDEO_ID or direct video URL"
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Supports YouTube embed URLs (youtube.com/embed/...) or direct video file URLs (.mp4, .webm)
+              </p>
+            </div>
+
+            {/* Video Options */}
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="flex items-center justify-between p-3 bg-white/5 border border-white/10 rounded-lg">
+                <div>
+                  <p className="text-sm font-medium text-slate-300">Autoplay</p>
+                  <p className="text-xs text-slate-500">Start playing automatically</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settings.heroVideoAutoplay}
+                    onChange={(e) => setSettings((prev) => ({ ...prev, heroVideoAutoplay: e.target.checked }))}
+                    disabled={!settings.heroVideoEnabled}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-cyan-500/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-500 peer-disabled:opacity-50"></div>
+                </label>
+              </div>
+
+              <div className="flex items-center justify-between p-3 bg-white/5 border border-white/10 rounded-lg">
+                <div>
+                  <p className="text-sm font-medium text-slate-300">Muted</p>
+                  <p className="text-xs text-slate-500">Play without sound</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settings.heroVideoMuted}
+                    onChange={(e) => setSettings((prev) => ({ ...prev, heroVideoMuted: e.target.checked }))}
+                    disabled={!settings.heroVideoEnabled}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-cyan-500/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-500 peer-disabled:opacity-50"></div>
+                </label>
+              </div>
+            </div>
+
+            {/* Duration */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Video Duration (seconds)
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="300"
+                value={settings.heroVideoDuration || ''}
+                onChange={(e) => setSettings((prev) => ({
+                  ...prev,
+                  heroVideoDuration: e.target.value ? parseInt(e.target.value, 10) : null
+                }))}
+                disabled={!settings.heroVideoEnabled}
+                className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                placeholder="Leave empty for auto-detect"
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Optional: Set the duration for the fade-out timing. Leave empty to use the video&apos;s natural length.
+              </p>
+            </div>
+
+            {/* Preview hint */}
+            {settings.heroVideoEnabled && settings.heroVideoUrl && (
+              <div className="mt-4 p-4 bg-pink-500/10 border border-pink-500/20 rounded-lg flex items-start gap-3">
+                <Play className="w-5 h-5 text-pink-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-pink-400">Video Configured</p>
+                  <p className="text-xs text-pink-400/80 mt-1">
+                    The video intro will play once when visitors first load the homepage, then fade to reveal the hero content.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

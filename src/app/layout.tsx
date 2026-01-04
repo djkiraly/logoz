@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Space_Grotesk } from 'next/font/google';
 import { Suspense } from 'react';
+import { headers } from 'next/headers';
 import './globals.css';
 import { SiteHeader } from '@/components/layout/site-header';
 import { SiteFooter } from '@/components/layout/site-footer';
@@ -50,6 +51,24 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const settings = await getSiteSettings();
+
+  // Check if this is an admin route to hide public site chrome
+  const headersList = await headers();
+  const pathname = headersList.get('x-pathname') || headersList.get('x-invoke-path') || '';
+  const isAdminRoute = pathname.startsWith('/admin');
+
+  // For admin routes, render without public header/footer
+  if (isAdminRoute) {
+    return (
+      <html lang="en">
+        <body className={`${display.variable} antialiased`}>
+          <Providers>
+            {children}
+          </Providers>
+        </body>
+      </html>
+    );
+  }
 
   return (
     <html lang="en">

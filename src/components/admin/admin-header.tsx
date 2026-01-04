@@ -29,7 +29,7 @@ export default function AdminHeader({ user }: { user: AdminUser }) {
 
   return (
     <header className="sticky top-0 z-30 bg-slate-900/80 backdrop-blur-xl border-b border-white/10">
-      <div className="flex items-center justify-between h-16 px-6">
+      <div className="flex items-center justify-between h-16 px-6 pl-16 lg:pl-6">
         {/* Search */}
         <div className="flex-1 max-w-md">
           <div className="relative">

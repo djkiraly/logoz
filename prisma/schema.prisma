@@ -39,6 +39,13 @@ model SiteSetting {
   faviconUrl     String?
   logoUrl        String?
 
+  // Hero Video Intro Configuration
+  heroVideoEnabled  Boolean @default(false)
+  heroVideoUrl      String?  // YouTube or other video embed URL
+  heroVideoAutoplay Boolean @default(true)
+  heroVideoMuted    Boolean @default(true)
+  heroVideoDuration Int?     // Duration in seconds (for fade timing)
+
   // reCAPTCHA Configuration
   recaptchaEnabled   Boolean @default(false)
   recaptchaSiteKey   String?

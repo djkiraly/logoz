@@ -34,6 +34,12 @@ const settingsSchema = z.object({
   faviconUrl: z.string().max(500).nullable().optional(),
   logoUrl: z.string().max(500).nullable().optional(),
   gcsConfig: gcsConfigSchema,
+  // Hero Video Intro settings
+  heroVideoEnabled: z.boolean().optional(),
+  heroVideoUrl: z.string().max(500).nullable().optional(),
+  heroVideoAutoplay: z.boolean().optional(),
+  heroVideoMuted: z.boolean().optional(),
+  heroVideoDuration: z.number().int().min(1).max(300).nullable().optional(),
   // reCAPTCHA settings
   recaptchaEnabled: z.boolean().optional(),
   recaptchaSiteKey: z.string().max(100).optional().or(z.literal('')).nullable(),
@@ -174,6 +180,37 @@ export async function PUT(request: Request) {
       settingsData.logoUrl = data.logoUrl;
     } else if (existingSettings && 'logoUrl' in existingSettings) {
       settingsData.logoUrl = existingSettings.logoUrl;
+    }
+
+    // Handle Hero Video Intro settings
+    if (data.heroVideoEnabled !== undefined) {
+      settingsData.heroVideoEnabled = data.heroVideoEnabled;
+    } else if (existingSettings) {
+      settingsData.heroVideoEnabled = existingSettings.heroVideoEnabled ?? false;
+    }
+
+    if (data.heroVideoUrl !== undefined) {
+      settingsData.heroVideoUrl = data.heroVideoUrl || null;
+    } else if (existingSettings) {
+      settingsData.heroVideoUrl = existingSettings.heroVideoUrl;
+    }
+
+    if (data.heroVideoAutoplay !== undefined) {
+      settingsData.heroVideoAutoplay = data.heroVideoAutoplay;
+    } else if (existingSettings) {
+      settingsData.heroVideoAutoplay = existingSettings.heroVideoAutoplay ?? true;
+    }
+
+    if (data.heroVideoMuted !== undefined) {
+      settingsData.heroVideoMuted = data.heroVideoMuted;
+    } else if (existingSettings) {
+      settingsData.heroVideoMuted = existingSettings.heroVideoMuted ?? true;
+    }
+
+    if (data.heroVideoDuration !== undefined) {
+      settingsData.heroVideoDuration = data.heroVideoDuration;
+    } else if (existingSettings) {
+      settingsData.heroVideoDuration = existingSettings.heroVideoDuration;
     }
 
     console.log('[Settings API] Upserting with data keys:', Object.keys(settingsData));
