@@ -5,6 +5,7 @@ import { Save, Loader2, AlertCircle, CheckCircle, Cloud, Eye, EyeOff, TestTube, 
 
 type SiteSettings = {
   siteName: string;
+  heroTagline: string;
   heroHeading: string;
   heroCopy: string;
   ctaLabel: string;
@@ -20,6 +21,8 @@ type SiteSettings = {
   copyrightText: string;
   faviconUrl: string | null;
   logoUrl: string | null;
+  // Hero Image
+  heroImageUrl: string | null;
   // Hero Video Intro
   heroVideoEnabled: boolean;
   heroVideoUrl: string | null;
@@ -59,6 +62,7 @@ const emptyRecaptchaConfig: RecaptchaConfig = {
 export default function SettingsPage() {
   const [settings, setSettings] = useState<SiteSettings>({
     siteName: '',
+    heroTagline: 'Cloud print operating system',
     heroHeading: '',
     heroCopy: '',
     ctaLabel: '',
@@ -74,6 +78,8 @@ export default function SettingsPage() {
     copyrightText: 'Crafted in the cloud.',
     faviconUrl: null,
     logoUrl: null,
+    // Hero Image
+    heroImageUrl: null,
     // Hero Video Intro
     heroVideoEnabled: false,
     heroVideoUrl: null,
@@ -83,8 +89,10 @@ export default function SettingsPage() {
   });
   const [isUploadingFavicon, setIsUploadingFavicon] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [isUploadingHeroImage, setIsUploadingHeroImage] = useState(false);
   const faviconInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const heroImageInputRef = useRef<HTMLInputElement>(null);
   const [gcsConfig, setGcsConfig] = useState<GcsConfig>(emptyGcsConfig);
   const [recaptchaConfig, setRecaptchaConfig] = useState<RecaptchaConfig>(emptyRecaptchaConfig);
   const [showPrivateKey, setShowPrivateKey] = useState(false);
@@ -109,6 +117,7 @@ export default function SettingsPage() {
       if (data.data) {
         setSettings({
           siteName: data.data.siteName || '',
+          heroTagline: data.data.heroTagline || 'Cloud print operating system',
           heroHeading: data.data.heroHeading || '',
           heroCopy: data.data.heroCopy || '',
           ctaLabel: data.data.ctaLabel || '',
@@ -124,6 +133,8 @@ export default function SettingsPage() {
           copyrightText: data.data.copyrightText || 'Crafted in the cloud.',
           faviconUrl: data.data.faviconUrl || null,
           logoUrl: data.data.logoUrl || null,
+          // Hero Image
+          heroImageUrl: data.data.heroImageUrl || null,
           // Hero Video Intro
           heroVideoEnabled: data.data.heroVideoEnabled ?? false,
           heroVideoUrl: data.data.heroVideoUrl || null,
@@ -393,6 +404,60 @@ export default function SettingsPage() {
   const handleRemoveLogo = () => {
     setSettings((prev) => ({ ...prev, logoUrl: null }));
     setMessage({ type: 'success', text: 'Logo removed. Click "Save Changes" to apply.' });
+  };
+
+  const handleHeroImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+    if (!allowedTypes.includes(file.type)) {
+      setMessage({ type: 'error', text: 'Invalid file type. Please upload a PNG, JPEG, WebP, or GIF file.' });
+      return;
+    }
+
+    // Validate file size (max 5MB for hero images)
+    if (file.size > 5 * 1024 * 1024) {
+      setMessage({ type: 'error', text: 'File too large. Hero image must be under 5MB.' });
+      return;
+    }
+
+    setIsUploadingHeroImage(true);
+    setMessage(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('folder', 'hero');
+
+      const response = await fetch('/api/admin/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to upload hero image');
+      }
+
+      setSettings((prev) => ({ ...prev, heroImageUrl: data.data.url }));
+      setMessage({ type: 'success', text: 'Hero image uploaded! Click "Save Changes" to apply.' });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to upload hero image';
+      setMessage({ type: 'error', text: errorMessage });
+    } finally {
+      setIsUploadingHeroImage(false);
+      if (heroImageInputRef.current) {
+        heroImageInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleRemoveHeroImage = () => {
+    setSettings((prev) => ({ ...prev, heroImageUrl: null }));
+    setMessage({ type: 'success', text: 'Hero image removed. Click "Save Changes" to apply.' });
   };
 
   if (isLoading) {
@@ -735,6 +800,23 @@ export default function SettingsPage() {
         <div className="p-5 space-y-5">
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">
+              Tagline
+            </label>
+            <input
+              type="text"
+              name="heroTagline"
+              value={settings.heroTagline}
+              onChange={handleChange}
+              className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+              placeholder="Cloud print operating system"
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              Small uppercase text displayed above the heading
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
               Heading
             </label>
             <input
@@ -788,6 +870,80 @@ export default function SettingsPage() {
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
                 placeholder="/products"
               />
+            </div>
+          </div>
+
+          {/* Hero Image Section */}
+          <div className="pt-5 border-t border-white/10">
+            <label className="block text-sm font-medium text-slate-300 mb-3">
+              Hero Image (Optional)
+            </label>
+            <p className="text-xs text-slate-500 mb-3">
+              Upload an image to display on the right side of the hero section. Leave empty for text-only hero.
+            </p>
+            <div className="flex items-start gap-4">
+              {/* Preview */}
+              <div className="flex-shrink-0">
+                <div className="w-40 h-24 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden">
+                  {settings.heroImageUrl ? (
+                    <img
+                      src={settings.heroImageUrl}
+                      alt="Hero image preview"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="text-center">
+                      <Image className="w-6 h-6 text-slate-500 mx-auto" />
+                      <span className="text-xs text-slate-500 mt-1 block">No image</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Upload Controls */}
+              <div className="flex-1 space-y-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={heroImageInputRef}
+                    type="file"
+                    accept=".png,.jpg,.jpeg,.webp,.gif,image/png,image/jpeg,image/webp,image/gif"
+                    onChange={handleHeroImageUpload}
+                    className="hidden"
+                    id="hero-image-upload"
+                  />
+                  <label
+                    htmlFor="hero-image-upload"
+                    className={`flex items-center gap-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 cursor-pointer transition-colors ${
+                      isUploadingHeroImage ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                  >
+                    {isUploadingHeroImage ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Upload className="w-4 h-4" />
+                    )}
+                    {settings.heroImageUrl ? 'Replace' : 'Upload'}
+                  </label>
+                  {settings.heroImageUrl && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveHeroImage}
+                      className="flex items-center gap-2 px-4 py-2 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/30 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500">
+                  Recommended: 800x600 or larger. Supports PNG, JPEG, WebP, GIF (max 5MB).
+                </p>
+                {!gcsConfig.enabled && (
+                  <p className="text-xs text-amber-400">
+                    Note: Enable Google Cloud Storage below to upload hero images.
+                  </p>
+                )}
+              </div>
             </div>
           </div>
 

@@ -21,6 +21,7 @@ enum FulfillmentMethod {
 model SiteSetting {
   id             Int     @id @default(1)
   siteName       String  @default("Logoz Custom")
+  heroTagline    String  @default("Cloud print operating system")
   heroHeading    String
   heroCopy       String
   ctaLabel       String
@@ -38,6 +39,9 @@ model SiteSetting {
   gcsConfig      Json?
   faviconUrl     String?
   logoUrl        String?
+
+  // Hero Image (displayed on right side of hero)
+  heroImageUrl      String?
 
   // Hero Video Intro Configuration
   heroVideoEnabled  Boolean @default(false)

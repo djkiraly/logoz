@@ -18,6 +18,7 @@ const gcsConfigSchema = z.object({
 
 const settingsSchema = z.object({
   siteName: z.string().max(100).optional().or(z.literal('')),
+  heroTagline: z.string().max(100).optional().or(z.literal('')),
   heroHeading: z.string().max(200).optional().or(z.literal('')),
   heroCopy: z.string().max(1000).optional().or(z.literal('')),
   ctaLabel: z.string().max(50).optional().or(z.literal('')),
@@ -33,6 +34,7 @@ const settingsSchema = z.object({
   copyrightText: z.string().max(200).optional().or(z.literal('')),
   faviconUrl: z.string().max(500).nullable().optional(),
   logoUrl: z.string().max(500).nullable().optional(),
+  heroImageUrl: z.string().max(500).nullable().optional(),
   gcsConfig: gcsConfigSchema,
   // Hero Video Intro settings
   heroVideoEnabled: z.boolean().optional(),
@@ -120,6 +122,7 @@ export async function PUT(request: Request) {
     // Build settings data without gcsConfig first
     const baseSettingsData = {
       siteName: getValue(data.siteName, existingSettings?.siteName, 'My Store'),
+      heroTagline: getValue(data.heroTagline, existingSettings?.heroTagline, 'Cloud print operating system'),
       heroHeading: getValue(data.heroHeading, existingSettings?.heroHeading, 'Welcome'),
       heroCopy: getValue(data.heroCopy, existingSettings?.heroCopy, ''),
       ctaLabel: getValue(data.ctaLabel, existingSettings?.ctaLabel, 'Get Started'),
@@ -180,6 +183,13 @@ export async function PUT(request: Request) {
       settingsData.logoUrl = data.logoUrl;
     } else if (existingSettings && 'logoUrl' in existingSettings) {
       settingsData.logoUrl = existingSettings.logoUrl;
+    }
+
+    // Handle heroImageUrl
+    if (data.heroImageUrl !== undefined) {
+      settingsData.heroImageUrl = data.heroImageUrl;
+    } else if (existingSettings && 'heroImageUrl' in existingSettings) {
+      settingsData.heroImageUrl = existingSettings.heroImageUrl;
     }
 
     // Handle Hero Video Intro settings

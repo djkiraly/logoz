@@ -30,6 +30,7 @@ const loadOrFallback = async <T>(
 
 export type SiteSettings = {
   siteName: string;
+  heroTagline: string;
   heroHeading: string;
   heroCopy: string;
   ctaLabel: string;
@@ -45,6 +46,8 @@ export type SiteSettings = {
   copyrightText: string;
   faviconUrl?: string | null;
   logoUrl?: string | null;
+  // Hero Image
+  heroImageUrl?: string | null;
   // Hero Video Intro
   heroVideoEnabled: boolean;
   heroVideoUrl?: string | null;
@@ -55,6 +58,7 @@ export type SiteSettings = {
 
 const normalizeSettings = (settings: Partial<SiteSettings>): SiteSettings => ({
   siteName: settings.siteName ?? fallback.siteSettings.siteName,
+  heroTagline: settings.heroTagline ?? 'Cloud print operating system',
   heroHeading: settings.heroHeading ?? fallback.siteSettings.heroHeading,
   heroCopy: settings.heroCopy ?? fallback.siteSettings.heroCopy,
   ctaLabel: settings.ctaLabel ?? fallback.siteSettings.ctaLabel,
@@ -70,6 +74,8 @@ const normalizeSettings = (settings: Partial<SiteSettings>): SiteSettings => ({
   copyrightText: settings.copyrightText ?? 'Crafted in the cloud.',
   faviconUrl: settings.faviconUrl ?? null,
   logoUrl: settings.logoUrl ?? null,
+  // Hero Image
+  heroImageUrl: settings.heroImageUrl ?? null,
   // Hero Video Intro
   heroVideoEnabled: settings.heroVideoEnabled ?? false,
   heroVideoUrl: settings.heroVideoUrl ?? null,

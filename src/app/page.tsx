@@ -30,7 +30,7 @@ export default async function Home() {
 
   return (
     <>
-      <HeroWithVideo settings={snapshot.settings} stats={snapshot.stats} />
+      <HeroWithVideo settings={snapshot.settings} />
       <CategoryRail categories={categories} />
       <ProductShowcase products={products} />
       <SupplierMarquee suppliers={suppliers} />

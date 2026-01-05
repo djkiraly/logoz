@@ -100,54 +100,57 @@ export function HeroVideoIntro({
 
   return (
     <div
-      className={`absolute inset-0 z-10 transition-opacity duration-1000 ${
+      className={`w-full h-full bg-[#05060a] transition-opacity duration-1000 ${
         isFading ? 'opacity-0 pointer-events-none' : 'opacity-100'
       }`}
     >
-      <div className="absolute inset-0 flex items-center justify-center overflow-hidden rounded-2xl">
-        {isDirectVideo ? (
-          <video
-            ref={videoRef}
-            src={videoUrl}
-            autoPlay={autoplay}
-            muted={muted}
-            playsInline
-            onEnded={handleVideoEnded}
-            className="w-full h-full object-cover"
-            style={{ pointerEvents: 'none' }}
-          />
-        ) : youtubeId ? (
+      {isDirectVideo ? (
+        <video
+          ref={videoRef}
+          src={videoUrl}
+          autoPlay={autoplay}
+          muted={muted}
+          playsInline
+          onEnded={handleVideoEnded}
+          className="w-full h-full object-cover"
+          style={{ pointerEvents: 'none' }}
+        />
+      ) : youtubeId ? (
+        <div className="relative w-full h-full overflow-hidden">
           <iframe
             ref={iframeRef}
             src={getYouTubeEmbedUrl()}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
-            className="w-full h-full border-0"
+            className="absolute border-0"
             style={{
               pointerEvents: 'none',
-              // Scale up to hide YouTube UI elements
-              transform: 'scale(1.2)',
+              width: '220%',
+              height: '220%',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
             }}
           />
-        ) : (
-          // Fallback: try as direct video anyway
-          <video
-            ref={videoRef}
-            src={videoUrl}
-            autoPlay={autoplay}
-            muted={muted}
-            playsInline
-            onEnded={handleVideoEnded}
-            className="w-full h-full object-cover"
-            style={{ pointerEvents: 'none' }}
-          />
-        )}
-      </div>
+        </div>
+      ) : (
+        // Fallback: try as direct video anyway
+        <video
+          ref={videoRef}
+          src={videoUrl}
+          autoPlay={autoplay}
+          muted={muted}
+          playsInline
+          onEnded={handleVideoEnded}
+          className="w-full h-full object-cover"
+          style={{ pointerEvents: 'none' }}
+        />
+      )}
 
       {/* Skip button - subtle, bottom right within the video area */}
       <button
         onClick={handleComplete}
-        className="absolute bottom-4 right-4 px-3 py-1.5 text-xs text-white/60 hover:text-white/90 transition-colors bg-black/30 hover:bg-black/50 rounded-full backdrop-blur-sm"
+        className="absolute bottom-6 right-6 z-20 px-3 py-1.5 text-xs text-white/60 hover:text-white/90 transition-colors bg-black/30 hover:bg-black/50 rounded-full backdrop-blur-sm"
       >
         Skip
       </button>
