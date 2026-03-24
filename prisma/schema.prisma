@@ -97,6 +97,27 @@ model AuditLog {
   @@index([userId])
 }
 
+model ArtworkVersion {
+  id              String    @id @default(cuid())
+  quoteId         String
+  version         Int
+  url             String
+  fileName        String
+  status          String    @default("PENDING")
+  sentAt          DateTime?
+  approvedAt      DateTime?
+  declinedAt      DateTime?
+  customerNotes   String?
+  uploadedById    String?
+  uploadedByName  String?
+  uploadedByEmail String?
+  createdAt       DateTime  @default(now())
+  quote           Quote     @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@index([quoteId])
+  @@index([version])
+}
+
 model Category {
   id          String     @id @default(cuid())
   slug        String     @unique
@@ -428,6 +449,7 @@ model Quote {
   artworkVersion    Int             @default(1)
   customer          Customer?       @relation(fields: [customerId], references: [id])
   owner             AdminUser?      @relation(fields: [ownerId], references: [id])
+  artworkVersions   ArtworkVersion[]
   auditLog          QuoteAuditLog[]
   lineItems         QuoteLineItem[]
 

@@ -142,8 +142,8 @@ export function DeviceBreakdownChart({
         </Pie>
         <Tooltip
           contentStyle={customTooltipStyle}
-          formatter={(value: number) => [
-            `${value.toLocaleString()} (${((value / total) * 100).toFixed(1)}%)`,
+          formatter={(value: number | undefined) => [
+            `${(value ?? 0).toLocaleString()} (${(((value ?? 0) / total) * 100).toFixed(1)}%)`,
             'Visits',
           ]}
         />
@@ -180,7 +180,7 @@ export function BrowserChart({
         />
         <Tooltip
           contentStyle={customTooltipStyle}
-          formatter={(value: number) => [value.toLocaleString(), 'Views']}
+          formatter={(value: number | undefined) => [(value ?? 0).toLocaleString(), 'Views']}
         />
         <Bar dataKey="count" fill={COLORS.primary} radius={[0, 4, 4, 0]} />
       </BarChart>
@@ -300,8 +300,8 @@ export function QuoteStatusChart({
         </Pie>
         <Tooltip
           contentStyle={customTooltipStyle}
-          formatter={(value: number) => [
-            `${value} (${((value / total) * 100).toFixed(1)}%)`,
+          formatter={(value: number | undefined) => [
+            `${value ?? 0} (${(((value ?? 0) / total) * 100).toFixed(1)}%)`,
             'Quotes',
           ]}
         />
@@ -348,7 +348,7 @@ export function TopProductsChart({
         />
         <Tooltip
           contentStyle={customTooltipStyle}
-          formatter={(value: number) => [value.toLocaleString(), 'Views']}
+          formatter={(value: number | undefined) => [(value ?? 0).toLocaleString(), 'Views']}
         />
         <Bar dataKey="views" fill={COLORS.secondary} radius={[0, 4, 4, 0]} />
       </BarChart>

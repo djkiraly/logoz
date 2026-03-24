@@ -1373,7 +1373,7 @@ export default function QuotesPage() {
                 {formData.lineItems.length === 0 ? (
                   <div className="text-center py-8 text-slate-500">
                     <Package className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                    <p>No items added yet. Click "Add Item" to start.</p>
+                    <p>No items added yet. Click &quot;Add Item&quot; to start.</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
