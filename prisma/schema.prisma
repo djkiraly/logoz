@@ -8,52 +8,93 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-enum FulfillmentMethod {
-  EMBROIDERY
-  SCREEN_PRINT
-  DTG
-  VINYL
-  SUBLIMATION
-  LASER
-  PROMO
+model AdminSession {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  userId    String
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime  @default(now())
+  user      AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@index([token])
+  @@index([userId])
 }
 
-model SiteSetting {
-  id             Int     @id @default(1)
-  siteName       String  @default("Logoz Custom")
-  heroTagline    String  @default("Cloud print operating system")
-  heroHeading    String
-  heroCopy       String
-  ctaLabel       String
-  ctaLink        String
-  contactEmail   String  @unique
-  contactPhone   String
-  address        String
-  announcement   String?
-  bannerEnabled    Boolean @default(true)
-  headerCtaEnabled Boolean @default(true)
-  headerCtaLabel   String  @default("Build a design")
-  headerCtaLink    String  @default("/design-studio")
-  copyrightText    String  @default("Crafted in the cloud.")
-  theme          Json?
-  gcsConfig      Json?
-  faviconUrl     String?
-  logoUrl        String?
+model AdminUser {
+  id                       String         @id @default(cuid())
+  email                    String         @unique
+  passwordHash             String
+  name                     String
+  role                     AdminRole      @default(ADMIN)
+  isActive                 Boolean        @default(true)
+  lastLoginAt              DateTime?
+  createdAt                DateTime       @default(now())
+  updatedAt                DateTime @updatedAt
+  emailVerified            Boolean        @default(false)
+  verificationToken        String?        @unique
+  verificationTokenExpiry  DateTime?
+  passwordResetToken       String?        @unique
+  passwordResetTokenExpiry DateTime?
+  sessions                 AdminSession[]
+  auditLogs                AuditLog[]
+  Quote                    Quote[]
 
-  // Hero Image (displayed on right side of hero)
-  heroImageUrl      String?
+  @@index([email])
+  @@index([passwordResetToken])
+  @@index([role])
+  @@index([verificationToken])
+}
 
-  // Hero Video Intro Configuration
-  heroVideoEnabled  Boolean @default(false)
-  heroVideoUrl      String?  // YouTube or other video embed URL
-  heroVideoAutoplay Boolean @default(true)
-  heroVideoMuted    Boolean @default(true)
-  heroVideoDuration Int?     // Duration in seconds (for fade timing)
+model AnalyticsSession {
+  id               String    @id @default(cuid())
+  sessionId        String    @unique
+  firstPage        String
+  landingPage      String
+  referrer         String?
+  utmSource        String?
+  utmMedium        String?
+  utmCampaign      String?
+  pageCount        Int       @default(1)
+  totalDuration    Int       @default(0)
+  country          String?
+  region           String?
+  city             String?
+  deviceType       String?
+  browser          String?
+  os               String?
+  ipAddress        String?
+  startedAt        DateTime  @default(now())
+  lastActiveAt     DateTime  @default(now())
+  endedAt          DateTime?
+  convertedToQuote Boolean   @default(false)
+  quoteId          String?
 
-  // reCAPTCHA Configuration
-  recaptchaEnabled   Boolean @default(false)
-  recaptchaSiteKey   String?
-  recaptchaSecretKey String?
+  @@index([convertedToQuote])
+  @@index([country])
+  @@index([deviceType])
+  @@index([sessionId])
+  @@index([startedAt(sort: Desc)])
+  @@index([utmSource])
+}
+
+model AuditLog {
+  id        String    @id @default(cuid())
+  userId    String
+  action    String
+  entity    String
+  entityId  String?
+  details   Json?
+  ipAddress String?
+  createdAt DateTime  @default(now())
+  user      AdminUser @relation(fields: [userId], references: [id])
+
+  @@index([action])
+  @@index([createdAt(sort: Desc)])
+  @@index([entity])
+  @@index([userId])
 }
 
 model Category {
@@ -61,72 +102,98 @@ model Category {
   slug        String     @unique
   title       String
   description String
-  imageUrl    String?
   featured    Boolean    @default(false)
-  services    Service[]
+  imageUrl    String?
   products    Product[]
+  services    Service[]
   suppliers   Supplier[] @relation("SupplierCategories")
 
   @@index([featured, title])
 }
 
-model Supplier {
-  id             String           @id @default(cuid())
-  name           String           @unique
-  logoUrl        String?
-  website        String?
-  description    String?
-  leadTimeDays   Int?
-  featured       Boolean          @default(false)
-  categories     Category[]       @relation("SupplierCategories")
-  products       Product[]
-  quoteLineItems QuoteLineItem[]
-
-  @@index([featured, name])
+model Collection {
+  id          String    @id @default(cuid())
+  slug        String    @unique
+  name        String
+  description String
+  heroImage   String?
+  designs     Design[]
+  products    Product[] @relation("CollectionProducts")
 }
 
-model Product {
-  id           String              @id @default(cuid())
-  sku          String              @unique
-  name         String
-  description  String
-  heroImageUrl String?
-  gallery      String[]
-  basePrice    Decimal             @db.Money
-  cost         Decimal?            @db.Money
-  minQuantity  Int                 @default(1)
-  category     Category            @relation(fields: [categoryId], references: [id])
-  categoryId   String
-  supplier     Supplier?           @relation(fields: [supplierId], references: [id])
-  supplierId   String?
-  fulfillment  FulfillmentMethod[]
-  variants     Variant[]
-  designs      Design[]
-  collections  Collection[]        @relation("CollectionProducts")
-  quoteLineItems QuoteLineItem[]
-  productViews ProductView[]
-  visible      Boolean             @default(false)
-  featured     Boolean             @default(false)
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
+model Customer {
+  id                   String         @id @default(cuid())
+  companyName          String?
+  customerType         CustomerType   @default(BUSINESS)
+  website              String?
+  industry             String?
+  employeeCount        String?
+  annualRevenue        String?
+  contactName          String
+  contactTitle         String?
+  email                String         @unique
+  phone                String?
+  mobilePhone          String?
+  addressLine1         String?
+  addressLine2         String?
+  city                 String?
+  state                String?
+  postalCode           String?
+  country              String?        @default("USA")
+  shippingAddressLine1 String?
+  shippingAddressLine2 String?
+  shippingCity         String?
+  shippingState        String?
+  shippingPostalCode   String?
+  shippingCountry      String?
+  status               CustomerStatus @default(LEAD)
+  source               String?
+  assignedTo           String?
+  tags                 String[]
+  taxExempt            Boolean        @default(false)
+  taxId                String?
+  paymentTerms         String?
+  creditLimit          Decimal?       @db.Money
+  preferredContact     String?
+  marketingOptIn       Boolean        @default(true)
+  notes                String?
+  lastContactAt        DateTime?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime @updatedAt
+  quotes               Quote[]
 
-  @@index([categoryId])
-  @@index([supplierId])
-  @@index([visible])
+  @@index([companyName])
   @@index([createdAt(sort: Desc)])
+  @@index([customerType])
+  @@index([email])
+  @@index([status])
 }
 
-model Variant {
-  id          String   @id @default(cuid())
-  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  productId   String
-  color       String
-  size        String
-  priceAdjust Decimal? @db.Money
-  inventory   Int?     @default(0)
+model DailyAnalytics {
+  id                 String   @id @default(cuid())
+  date               DateTime @unique @db.Date
+  pageViews          Int      @default(0)
+  uniqueVisitors     Int      @default(0)
+  newVisitors        Int      @default(0)
+  returningVisitors  Int      @default(0)
+  avgSessionDuration Int      @default(0)
+  avgPageViews       Decimal  @default(0)
+  bounceRate         Decimal  @default(0)
+  quotesStarted      Int      @default(0)
+  quotesSubmitted    Int      @default(0)
+  quotesApproved     Int      @default(0)
+  conversionRate     Decimal  @default(0)
+  productViews       Int      @default(0)
+  topProducts        Json?
+  topCountries       Json?
+  desktopVisits      Int      @default(0)
+  mobileVisits       Int      @default(0)
+  tabletVisits       Int      @default(0)
+  quotesValue        Decimal  @default(0) @db.Money
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  @@unique([productId, color, size])
-  @@index([productId])
+  @@index([date(sort: Desc)])
 }
 
 model Design {
@@ -136,48 +203,51 @@ model Design {
   previewUrl   String
   sourceFile   String?
   tags         String[]
-  products     Product[]
-  collection   Collection? @relation(fields: [collectionId], references: [id])
   collectionId String?
   featured     Boolean     @default(false)
+  collection   Collection? @relation(fields: [collectionId], references: [id])
+  products     Product[]
 
-  @@index([featured])
   @@index([collectionId])
+  @@index([featured])
 }
 
-model Collection {
-  id          String    @id @default(cuid())
-  slug        String    @unique
-  name        String
-  description String
-  heroImage   String?
-  products    Product[] @relation("CollectionProducts")
-  designs     Design[]
+model EmailConfig {
+  id                Int       @id @default(1)
+  provider          String    @default("gmail")
+  gmailClientId     String?
+  gmailClientSecret String?
+  gmailRefreshToken String?
+  gmailAccessToken  String?
+  gmailTokenExpiry  DateTime?
+  fromName          String    @default("Logoz Custom")
+  fromEmail         String?
+  replyToEmail      String?
+  isConfigured      Boolean   @default(false)
+  lastTestedAt      DateTime?
+  lastTestStatus    String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
-model Service {
-  id         String              @id @default(cuid())
-  slug       String              @unique
-  title      String
-  summary    String
-  body       String
-  heroImage  String?
-  methods    FulfillmentMethod[]
-  ctaLabel   String?
-  ctaLink    String?
-  categories Category[]
-}
+model EntityActivity {
+  id           String       @id @default(cuid())
+  entityType   EntityType
+  entityId     String
+  activityType ActivityType
+  userId       String?
+  sessionId    String?
+  ipAddress    String?
+  oldValue     Json?
+  newValue     Json?
+  metadata     Json?
+  createdAt    DateTime     @default(now())
 
-model Testimonial {
-  id        String  @id @default(cuid())
-  author    String  @unique
-  title     String?
-  company   String?
-  quote     String
-  rating    Int     @default(5)
-  avatarUrl String?
-
-  @@index([rating(sort: Desc)])
+  @@index([activityType])
+  @@index([createdAt(sort: Desc)])
+  @@index([entityId])
+  @@index([entityType])
+  @@index([userId])
 }
 
 model Faq {
@@ -187,6 +257,249 @@ model Faq {
   category String?
 
   @@index([category])
+}
+
+model NotificationLog {
+  id             String              @id @default(cuid())
+  type           NotificationType
+  channel        NotificationChannel
+  recipientEmail String?
+  recipientPhone String?
+  recipientName  String?
+  subject        String?
+  body           String?
+  status         String              @default("pending")
+  errorMessage   String?
+  sentAt         DateTime?
+  quoteId        String?
+  customerId     String?
+  userId         String?
+  createdAt      DateTime            @default(now())
+
+  @@index([createdAt(sort: Desc)])
+  @@index([customerId])
+  @@index([quoteId])
+  @@index([status])
+  @@index([type])
+}
+
+model NotificationSetting {
+  id              String              @id @default(cuid())
+  type            NotificationType    @unique
+  name            String
+  description     String?
+  channel         NotificationChannel @default(EMAIL)
+  enabled         Boolean             @default(false)
+  subject         String?
+  bodyTemplate    String?
+  recipientEmails String[]
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([enabled])
+  @@index([type])
+}
+
+model PageView {
+  id          String   @id @default(cuid())
+  path        String
+  referrer    String?
+  userAgent   String?
+  ipAddress   String?
+  sessionId   String?
+  createdAt   DateTime @default(now())
+  browser     String?
+  city        String?
+  country     String?
+  deviceType  String?
+  duration    Int?
+  exitPage    Boolean  @default(false)
+  os          String?
+  region      String?
+  scrollDepth Int?
+  isAdmin     Boolean  @default(false)
+
+  @@index([country])
+  @@index([createdAt(sort: Desc)])
+  @@index([deviceType])
+  @@index([isAdmin])
+  @@index([path])
+  @@index([sessionId])
+}
+
+model Product {
+  id                 String              @id @default(cuid())
+  sku                String              @unique
+  name               String
+  description        String
+  heroImageUrl       String?
+  gallery            String[]
+  basePrice          Decimal             @db.Money
+  minQuantity        Int                 @default(1)
+  categoryId         String
+  supplierId         String?
+  fulfillment        FulfillmentMethod[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime @updatedAt
+  featured           Boolean             @default(false)
+  visible            Boolean             @default(false)
+  cost               Decimal?            @db.Money
+  imageSource        ImageSource         @default(LOCAL)
+  keywords           String[]
+  lastSyncedAt       DateTime?
+  priceCode          String?
+  productStatus      ProductStatus       @default(ACTIVE)
+  sanmarBrand        String?
+  sanmarCategory     String?
+  sanmarInventoryKey String?
+  sanmarStyleId      String?             @unique
+  syncSource         String?
+  category           Category            @relation(fields: [categoryId], references: [id])
+  supplier           Supplier?           @relation(fields: [supplierId], references: [id])
+  productViews       ProductView[]
+  lineItems          QuoteLineItem[]
+  variants           Variant[]
+  collections        Collection[]        @relation("CollectionProducts")
+  designs            Design[]
+
+  @@index([categoryId])
+  @@index([createdAt(sort: Desc)])
+  @@index([productStatus])
+  @@index([sanmarStyleId])
+  @@index([supplierId])
+  @@index([visible])
+}
+
+model ProductView {
+  id           String   @id @default(cuid())
+  productId    String
+  sessionId    String?
+  ipAddress    String?
+  referrer     String?
+  duration     Int?
+  addedToQuote Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt(sort: Desc)])
+  @@index([productId])
+  @@index([sessionId])
+}
+
+model Quote {
+  id                String          @id @default(cuid())
+  quoteNumber       String          @unique
+  customerId        String?
+  customerName      String?
+  customerEmail     String?
+  customerPhone     String?
+  customerCompany   String?
+  title             String?
+  notes             String?
+  internalNotes     String?
+  validUntil        DateTime?
+  requestedDelivery DateTime?
+  subtotal          Decimal         @default(0) @db.Money
+  discount          Decimal         @default(0) @db.Money
+  discountType      DiscountType    @default(FIXED)
+  tax               Decimal         @default(0) @db.Money
+  taxRate           Decimal         @default(0)
+  shipping          Decimal         @default(0) @db.Money
+  total             Decimal         @default(0) @db.Money
+  status            QuoteStatus     @default(PENDING)
+  sentAt            DateTime?
+  approvedAt        DateTime?
+  createdBy         String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime @updatedAt
+  ownerId           String?
+  lastModifiedAt    DateTime        @default(now())
+  accessToken       String?         @unique
+  declinedAt        DateTime?
+  discountValue     Decimal         @default(0)
+  artworkApprovedAt DateTime?
+  artworkDeclinedAt DateTime?
+  artworkFileName   String?
+  artworkNotes      String?
+  artworkRequired   Boolean         @default(false)
+  artworkSentAt     DateTime?
+  artworkToken      String?         @unique
+  artworkUrl        String?
+  artworkVersion    Int             @default(1)
+  customer          Customer?       @relation(fields: [customerId], references: [id])
+  owner             AdminUser?      @relation(fields: [ownerId], references: [id])
+  auditLog          QuoteAuditLog[]
+  lineItems         QuoteLineItem[]
+
+  @@index([createdAt(sort: Desc)])
+  @@index([customerId])
+  @@index([lastModifiedAt(sort: Desc)])
+  @@index([ownerId])
+  @@index([quoteNumber])
+  @@index([status])
+}
+
+model QuoteAuditLog {
+  id            String              @id @default(cuid())
+  quoteId       String
+  action        QuoteAuditAction
+  description   String
+  actorType     QuoteAuditActorType @default(ADMIN)
+  actorId       String?
+  actorName     String?
+  actorEmail    String?
+  previousValue Json?
+  newValue      Json?
+  metadata      Json?
+  createdAt     DateTime            @default(now())
+  quote         Quote               @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@index([action])
+  @@index([createdAt(sort: Desc)])
+  @@index([quoteId])
+}
+
+model QuoteFunnelEvent {
+  id         String           @id @default(cuid())
+  stage      QuoteFunnelStage
+  sessionId  String?
+  quoteId    String?
+  customerId String?
+  productIds String[]
+  metadata   Json?
+  createdAt  DateTime         @default(now())
+
+  @@index([createdAt(sort: Desc)])
+  @@index([quoteId])
+  @@index([sessionId])
+  @@index([stage])
+}
+
+model QuoteLineItem {
+  id             String             @id @default(cuid())
+  quoteId        String
+  itemType       LineItemType       @default(PRODUCT)
+  productId      String?
+  supplierId     String?
+  sku            String?
+  name           String
+  description    String?
+  serviceType    FulfillmentMethod?
+  serviceOptions Json?
+  quantity       Int                @default(1)
+  unitPrice      Decimal            @db.Money
+  discount       Decimal            @default(0) @db.Money
+  total          Decimal            @db.Money
+  sortOrder      Int                @default(0)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime @updatedAt
+  product        Product?           @relation(fields: [productId], references: [id])
+  quote          Quote              @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  supplier       Supplier?          @relation(fields: [supplierId], references: [id])
+
+  @@index([productId])
+  @@index([quoteId])
+  @@index([supplierId])
 }
 
 model QuoteRequest {
@@ -203,261 +516,202 @@ model QuoteRequest {
   status      QuoteStatus       @default(PENDING)
   attachments String[]
   createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  updatedAt   DateTime @updatedAt
 
+  @@index([createdAt(sort: Desc)])
   @@index([email])
-  @@index([status])
   @@index([serviceType])
-  @@index([createdAt(sort: Desc)])
-}
-
-enum QuoteStatus {
-  PENDING
-  REVIEWING
-  SENT
-  ARTWORK_PENDING    // Artwork sent to customer, awaiting approval
-  ARTWORK_APPROVED   // Customer approved the artwork
-  ARTWORK_DECLINED   // Customer declined the artwork
-  APPROVED
-  DECLINED
-  ARCHIVED
-}
-
-// ===========================================
-// Admin Quotes (Generated by Staff)
-// ===========================================
-
-model Quote {
-  id              String          @id @default(cuid())
-  quoteNumber     String          @unique
-
-  // Customer reference
-  customer        Customer?       @relation(fields: [customerId], references: [id])
-  customerId      String?
-
-  // Or manual customer info (for quick quotes without full customer record)
-  customerName    String?
-  customerEmail   String?
-  customerPhone   String?
-  customerCompany String?
-
-  // Quote details
-  title           String?
-  notes           String?
-  internalNotes   String?
-
-  // Dates
-  validUntil      DateTime?
-  requestedDelivery DateTime?
-
-  // Pricing
-  subtotal        Decimal         @default(0) @db.Money
-  discountValue   Decimal         @default(0)  // User's input value (percentage or fixed amount)
-  discount        Decimal         @default(0) @db.Money  // Calculated discount amount
-  discountType    DiscountType    @default(FIXED)
-  tax             Decimal         @default(0) @db.Money
-  taxRate         Decimal         @default(0)
-  shipping        Decimal         @default(0) @db.Money
-  total           Decimal         @default(0) @db.Money
-
-  // Status
-  status          QuoteStatus     @default(PENDING)
-  sentAt          DateTime?
-  approvedAt      DateTime?
-  declinedAt      DateTime?
-
-  // Public access token for customer viewing/approval
-  accessToken     String?         @unique
-
-  // Artwork approval workflow
-  artworkRequired     Boolean     @default(false)
-  artworkUrl          String?     // URL to the artwork file
-  artworkFileName     String?     // Original filename for display
-  artworkToken        String?     @unique  // Token for public artwork approval page
-  artworkSentAt       DateTime?   // When artwork was sent to customer
-  artworkApprovedAt   DateTime?   // When customer approved artwork
-  artworkDeclinedAt   DateTime?   // When customer declined artwork
-  artworkNotes        String?     // Customer's notes on artwork (approval/decline reason)
-  artworkVersion      Int         @default(1)  // Track artwork revisions
-
-  // Artwork version history
-  artworkVersions     ArtworkVersion[]
-
-  // Line items
-  lineItems       QuoteLineItem[]
-
-  // Audit trail
-  auditLogs       QuoteAuditLog[]
-
-  // Quote Owner (internal resource responsible for the quote)
-  owner           AdminUser?      @relation("QuoteOwner", fields: [ownerId], references: [id])
-  ownerId         String?
-
-  // Metadata
-  createdBy       String?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  lastModifiedAt  DateTime        @default(now())
-
-  @@index([customerId])
   @@index([status])
-  @@index([quoteNumber])
-  @@index([ownerId])
-  @@index([createdAt(sort: Desc)])
-  @@index([lastModifiedAt(sort: Desc)])
 }
 
-// ===========================================
-// Artwork Version History
-// ===========================================
+model SanMarCategoryMapping {
+  id              String   @id @default(cuid())
+  sanmarCategory  String   @unique
+  localCategoryId String?
+  autoCreate      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-model ArtworkVersion {
-  id              String    @id @default(cuid())
-  quote           Quote     @relation(fields: [quoteId], references: [id], onDelete: Cascade)
-  quoteId         String
-
-  // Version info
-  version         Int
-  url             String    // URL to the artwork file
-  fileName        String    // Original filename
-
-  // Status at time of archival
-  status          String    // PENDING, APPROVED, DECLINED
-  sentAt          DateTime?
-  approvedAt      DateTime?
-  declinedAt      DateTime?
-  customerNotes   String?   // Customer feedback for this version
-
-  // Who uploaded this version
-  uploadedById    String?
-  uploadedByName  String?
-  uploadedByEmail String?
-
-  createdAt       DateTime  @default(now())
-
-  @@unique([quoteId, version])
-  @@index([quoteId])
-  @@index([createdAt(sort: Desc)])
+  @@index([sanmarCategory])
 }
 
-model QuoteLineItem {
-  id              String          @id @default(cuid())
-  quote           Quote           @relation(fields: [quoteId], references: [id], onDelete: Cascade)
-  quoteId         String
+model SanMarSyncConfig {
+  id                  Int       @id @default(1)
+  customerNumber      String?
+  username            String?
+  passwordEncrypted   String?
+  syncEnabled         Boolean   @default(false)
+  autoSyncEnabled     Boolean   @default(false)
+  autoSyncSchedule    String?
+  defaultVisibility   Boolean   @default(false)
+  defaultCategoryId   String?
+  importDiscontinued  Boolean   @default(false)
+  categoryFilter      String[]
+  brandFilter         String[]
+  lastBulkSyncAt      DateTime?
+  lastDeltaSyncAt     DateTime?
+  lastInventorySyncAt DateTime?
+  lastPricingSyncAt   DateTime?
+  totalProductsSynced Int       @default(0)
+  totalVariantsSynced Int       @default(0)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime @updatedAt
+}
 
-  // Line item type
-  itemType        LineItemType    @default(PRODUCT)
+model SanMarSyncLog {
+  id              String           @id @default(cuid())
+  syncType        SanMarSyncType
+  status          SanMarSyncStatus @default(PENDING)
+  totalItems      Int              @default(0)
+  processedItems  Int              @default(0)
+  productsAdded   Int              @default(0)
+  productsUpdated Int              @default(0)
+  productsSkipped Int              @default(0)
+  variantsAdded   Int              @default(0)
+  variantsUpdated Int              @default(0)
+  suppliersAdded  Int              @default(0)
+  errorCount      Int              @default(0)
+  errors          Json?
+  triggeredBy     String?
+  options         Json?
+  startedAt       DateTime         @default(now())
+  completedAt     DateTime?
 
-  // Product reference (optional)
-  product         Product?        @relation(fields: [productId], references: [id])
-  productId       String?
+  @@index([startedAt(sort: Desc)])
+  @@index([status])
+  @@index([syncType])
+}
 
-  // Vendor/Supplier reference (optional)
-  supplier        Supplier?       @relation(fields: [supplierId], references: [id])
-  supplierId      String?
+model Service {
+  id        String              @id @default(cuid())
+  slug      String              @unique
+  title     String
+  summary   String
+  body      String
+  heroImage String?
+  methods   FulfillmentMethod[]
+  ctaLabel  String?
+  ctaLink   String?
+  categories  Category[]
+}
 
-  // Item details (can override product info or be custom)
-  sku             String?
-  name            String
-  description     String?
+model SiteSetting {
+  id                 Int     @id @default(1)
+  siteName           String  @default("Logoz Custom")
+  heroTagline        String  @default("Cloud print operating system")
+  heroHeading        String
+  heroCopy           String
+  ctaLabel           String
+  ctaLink            String
+  contactEmail       String  @unique
+  contactPhone       String
+  address            String
+  announcement       String?
+  theme              Json?
+  gcsConfig          Json?
+  recaptchaEnabled   Boolean @default(false)
+  recaptchaSecretKey String?
+  recaptchaSiteKey   String?
+  bannerEnabled      Boolean @default(true)
+  headerCtaLabel     String  @default("Build a design")
+  headerCtaLink      String  @default("/design-studio")
+  headerCtaEnabled   Boolean @default(true)
+  copyrightText      String  @default("Crafted in the cloud.")
+  faviconUrl         String?
+  logoUrl            String?
+  heroImageUrl       String?
+  heroVideoEnabled   Boolean @default(false)
+  heroVideoUrl       String?
+  heroVideoAutoplay  Boolean @default(true)
+  heroVideoMuted     Boolean @default(true)
+  heroVideoDuration  Int?
+}
 
-  // Service details
-  serviceType     FulfillmentMethod?
-  serviceOptions  Json?           // For screen print colors, vinyl details, etc.
+model SmsConfig {
+  id             Int       @id @default(1)
+  provider       String    @default("twilio")
+  accountSid     String?
+  authToken      String?
+  fromNumber     String?
+  isConfigured   Boolean   @default(false)
+  lastTestedAt   DateTime?
+  lastTestStatus String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime @updatedAt
+}
 
-  // Pricing
-  quantity        Int             @default(1)
-  unitPrice       Decimal         @db.Money
-  discount        Decimal         @default(0) @db.Money
-  total           Decimal         @db.Money
+model Supplier {
+  id                 String          @id @default(cuid())
+  name               String          @unique
+  logoUrl            String?
+  website            String?
+  description        String?
+  leadTimeDays       Int?
+  featured           Boolean         @default(false)
+  embellishRequired  Boolean         @default(false)
+  isSanmarBrand      Boolean         @default(false)
+  mapRestricted      Boolean         @default(false)
+  sanmarBrandLogoUrl String?
+  sanmarBrandName    String?         @unique
+  capabilities       String[]        @default([])
+  products           Product[]
+  lineItems          QuoteLineItem[]
+  category           Category[]      @relation("SupplierCategories")
 
-  // Ordering
-  sortOrder       Int             @default(0)
+  @@index([featured, name])
+  @@index([sanmarBrandName])
+}
 
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+model Testimonial {
+  id        String  @id @default(cuid())
+  author    String  @unique
+  title     String?
+  company   String?
+  quote     String
+  rating    Int     @default(5)
+  avatarUrl String?
 
-  @@index([quoteId])
+  @@index([rating(sort: Desc)])
+}
+
+model Variant {
+  id                 String   @id @default(cuid())
+  productId          String
+  color              String
+  size               String
+  priceAdjust        Decimal? @db.Money
+  inventory          Int?     @default(0)
+  casePrice          Decimal? @db.Money
+  caseSize           Int?
+  gtin               String?
+  piecePrice         Decimal? @db.Money
+  pieceWeight        Decimal?
+  salePrice          Decimal? @db.Money
+  sanmarCatalogColor String?
+  sanmarPartId       String?
+  sanmarUniqueKey    String?  @unique
+  product            Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, color, size])
   @@index([productId])
-  @@index([supplierId])
+  @@index([sanmarUniqueKey])
 }
 
-enum LineItemType {
-  PRODUCT
-  SERVICE
-  CUSTOM
-  SETUP_FEE
-  SHIPPING
-  DISCOUNT
-}
-
-enum DiscountType {
-  FIXED
-  PERCENTAGE
-}
-
-// ===========================================
-// Quote Audit Trail
-// ===========================================
-
-model QuoteAuditLog {
-  id            String              @id @default(cuid())
-  quote         Quote               @relation(fields: [quoteId], references: [id], onDelete: Cascade)
-  quoteId       String
-
-  // What happened
-  action        QuoteAuditAction
-  description   String              // Human-readable description
-
-  // Who made the change
-  actorType     QuoteAuditActorType @default(ADMIN)
-  actorId       String?             // AdminUser ID if admin, null if system/customer
-  actorName     String?             // Name for display (cached)
-  actorEmail    String?             // Email for display (cached)
-
-  // Change details (JSON for flexibility)
-  previousValue Json?               // Previous state/values
-  newValue      Json?               // New state/values
-  metadata      Json?               // Additional context
-
-  createdAt     DateTime            @default(now())
-
-  @@index([quoteId])
-  @@index([createdAt(sort: Desc)])
-  @@index([action])
-}
-
-enum QuoteAuditAction {
+enum ActivityType {
   CREATED
   UPDATED
-  STATUS_CHANGED
-  SENT_TO_CUSTOMER
-  APPROVED_BY_CUSTOMER
-  DECLINED_BY_CUSTOMER
-  LINE_ITEM_ADDED
-  LINE_ITEM_UPDATED
-  LINE_ITEM_REMOVED
-  CUSTOMER_CHANGED
-  OWNER_CHANGED
-  PRICING_UPDATED
   DELETED
-  // Artwork approval actions
-  ARTWORK_UPLOADED
-  ARTWORK_SENT_TO_CUSTOMER
-  ARTWORK_APPROVED_BY_CUSTOMER
-  ARTWORK_DECLINED_BY_CUSTOMER
-  ARTWORK_UPDATED
+  VIEWED
+  PUBLISHED
+  UNPUBLISHED
+  STATUS_CHANGED
 }
 
-enum QuoteAuditActorType {
+enum AdminRole {
+  SUPER_ADMIN
   ADMIN
-  CUSTOMER
-  SYSTEM
+  EDITOR
 }
-
-// ===========================================
-// CRM & Customers
-// ===========================================
 
 enum CustomerStatus {
   LEAD
@@ -475,235 +729,93 @@ enum CustomerType {
   EDUCATION
 }
 
-model Customer {
-  id              String         @id @default(cuid())
-
-  // Company Information
-  companyName     String?
-  customerType    CustomerType   @default(BUSINESS)
-  website         String?
-  industry        String?
-  employeeCount   String?
-  annualRevenue   String?
-
-  // Primary Contact
-  contactName     String
-  contactTitle    String?
-  email           String         @unique
-  phone           String?
-  mobilePhone     String?
-
-  // Address
-  addressLine1    String?
-  addressLine2    String?
-  city            String?
-  state           String?
-  postalCode      String?
-  country         String?        @default("USA")
-
-  // Shipping Address (if different)
-  shippingAddressLine1  String?
-  shippingAddressLine2  String?
-  shippingCity          String?
-  shippingState         String?
-  shippingPostalCode    String?
-  shippingCountry       String?
-
-  // CRM Fields
-  status          CustomerStatus @default(LEAD)
-  source          String?        // How they found us (referral, web, trade show, etc.)
-  assignedTo      String?        // Sales rep or account manager
-  tags            String[]       // Custom tags for segmentation
-
-  // Financial
-  taxExempt       Boolean        @default(false)
-  taxId           String?        // EIN or tax exempt number
-  paymentTerms    String?        // Net 30, Net 60, etc.
-  creditLimit     Decimal?       @db.Money
-
-  // Communication Preferences
-  preferredContact String?       // email, phone, text
-  marketingOptIn   Boolean       @default(true)
-
-  // Notes & History
-  notes           String?        // General notes about the customer
-
-  // Relations
-  quotes          Quote[]
-
-  // Timestamps
-  lastContactAt   DateTime?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-
-  @@index([email])
-  @@index([companyName])
-  @@index([status])
-  @@index([customerType])
-  @@index([createdAt(sort: Desc)])
+enum DiscountType {
+  FIXED
+  PERCENTAGE
 }
 
-// ===========================================
-// Admin & Authentication
-// ===========================================
-
-model AdminUser {
-  id           String         @id @default(cuid())
-  email        String         @unique
-  passwordHash String
-  name         String
-  role         AdminRole      @default(ADMIN)
-  isActive     Boolean        @default(true)
-
-  // Email verification
-  emailVerified    Boolean    @default(false)
-  verificationToken String?   @unique
-  verificationTokenExpiry DateTime?
-
-  // Password reset
-  passwordResetToken String?   @unique
-  passwordResetTokenExpiry DateTime?
-
-  lastLoginAt  DateTime?
-  sessions     AdminSession[]
-  auditLogs    AuditLog[]
-  ownedQuotes  Quote[]        @relation("QuoteOwner")
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-
-  @@index([email])
-  @@index([role])
-  @@index([verificationToken])
-  @@index([passwordResetToken])
+enum EntityType {
+  PRODUCT
+  VENDOR
+  QUOTE
+  CUSTOMER
+  CATEGORY
+  USER
 }
 
-model AdminSession {
-  id        String    @id @default(cuid())
-  token     String    @unique
-  user      AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    String
-  expiresAt DateTime
-  ipAddress String?
-  userAgent String?
-  createdAt DateTime  @default(now())
-
-  @@index([token])
-  @@index([userId])
-  @@index([expiresAt])
+enum FulfillmentMethod {
+  EMBROIDERY
+  SCREEN_PRINT
+  DTG
+  VINYL
+  SUBLIMATION
+  LASER
+  PROMO
 }
 
-model AuditLog {
-  id        String    @id @default(cuid())
-  user      AdminUser @relation(fields: [userId], references: [id])
-  userId    String
-  action    String
-  entity    String
-  entityId  String?
-  details   Json?
-  ipAddress String?
-  createdAt DateTime  @default(now())
-
-  @@index([userId])
-  @@index([action])
-  @@index([entity])
-  @@index([createdAt(sort: Desc)])
+enum ImageSource {
+  LOCAL
+  REMOTE
+  HYBRID
 }
 
-model PageView {
-  id          String   @id @default(cuid())
-  path        String
-  referrer    String?
-  userAgent   String?
-  ipAddress   String?
-  sessionId   String?
-  // Enhanced tracking
-  duration    Int?     // Time spent on page in seconds
-  scrollDepth Int?     // Max scroll depth percentage (0-100)
-  exitPage    Boolean  @default(false)
-  isAdmin     Boolean  @default(false) // true for admin panel views, false for public site
-  // Geographic data (populated from IP)
-  country     String?
-  region      String?
-  city        String?
-  // Device info (parsed from user agent)
-  deviceType  String?  // desktop, mobile, tablet
-  browser     String?
-  os          String?
-  createdAt   DateTime @default(now())
-
-  @@index([path])
-  @@index([createdAt(sort: Desc)])
-  @@index([sessionId])
-  @@index([country])
-  @@index([deviceType])
-  @@index([isAdmin])
+enum LineItemType {
+  PRODUCT
+  SERVICE
+  CUSTOM
+  SETUP_FEE
+  SHIPPING
+  DISCOUNT
 }
 
-// ===========================================
-// Analytics: Session Tracking
-// ===========================================
-
-model AnalyticsSession {
-  id              String    @id @default(cuid())
-  sessionId       String    @unique
-  // First touch attribution
-  firstPage       String
-  landingPage     String
-  referrer        String?
-  utmSource       String?
-  utmMedium       String?
-  utmCampaign     String?
-  // Session metrics
-  pageCount       Int       @default(1)
-  totalDuration   Int       @default(0)  // Total time in seconds
-  // Geographic data
-  country         String?
-  region          String?
-  city            String?
-  // Device info
-  deviceType      String?
-  browser         String?
-  os              String?
-  ipAddress       String?
-  // Timestamps
-  startedAt       DateTime  @default(now())
-  lastActiveAt    DateTime  @default(now())
-  endedAt         DateTime?
-  // Conversion tracking
-  convertedToQuote Boolean  @default(false)
-  quoteId          String?
-
-  @@index([sessionId])
-  @@index([startedAt(sort: Desc)])
-  @@index([country])
-  @@index([deviceType])
-  @@index([convertedToQuote])
-  @@index([utmSource])
+enum NotificationChannel {
+  EMAIL
+  SMS
 }
 
-// ===========================================
-// Analytics: Product Views
-// ===========================================
-
-model ProductView {
-  id          String   @id @default(cuid())
-  productId   String
-  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  sessionId   String?
-  ipAddress   String?
-  referrer    String?
-  duration    Int?     // Time spent viewing in seconds
-  addedToQuote Boolean @default(false)
-  createdAt   DateTime @default(now())
-
-  @@index([productId])
-  @@index([sessionId])
-  @@index([createdAt(sort: Desc)])
+enum NotificationType {
+  INTERNAL_QUOTE_CREATED
+  INTERNAL_QUOTE_STATUS_CHANGE
+  INTERNAL_USER_VERIFICATION
+  CUSTOMER_QUOTE_SENT
+  CUSTOMER_QUOTE_STATUS_CHANGE
+  INTERNAL_ARTWORK_RESPONSE
+  CUSTOMER_ARTWORK_APPROVAL
 }
 
-// ===========================================
-// Analytics: Quote Funnel Events
-// ===========================================
+enum ProductStatus {
+  ACTIVE
+  DISCONTINUED
+  COMING_SOON
+  NEW
+}
+
+enum QuoteAuditAction {
+  CREATED
+  UPDATED
+  STATUS_CHANGED
+  SENT_TO_CUSTOMER
+  APPROVED_BY_CUSTOMER
+  DECLINED_BY_CUSTOMER
+  LINE_ITEM_ADDED
+  LINE_ITEM_UPDATED
+  LINE_ITEM_REMOVED
+  CUSTOMER_CHANGED
+  OWNER_CHANGED
+  PRICING_UPDATED
+  DELETED
+  ARTWORK_UPLOADED
+  ARTWORK_SENT_TO_CUSTOMER
+  ARTWORK_APPROVED_BY_CUSTOMER
+  ARTWORK_DECLINED_BY_CUSTOMER
+  ARTWORK_UPDATED
+}
+
+enum QuoteAuditActorType {
+  ADMIN
+  CUSTOMER
+  SYSTEM
+}
 
 enum QuoteFunnelStage {
   VIEWED_PRODUCTS
@@ -715,230 +827,30 @@ enum QuoteFunnelStage {
   QUOTE_REJECTED
 }
 
-model QuoteFunnelEvent {
-  id          String           @id @default(cuid())
-  stage       QuoteFunnelStage
-  sessionId   String?
-  quoteId     String?
-  customerId  String?
-  // Metadata
-  productIds  String[]
-  metadata    Json?
-  // Timestamps
-  createdAt   DateTime         @default(now())
-
-  @@index([stage])
-  @@index([sessionId])
-  @@index([quoteId])
-  @@index([createdAt(sort: Desc)])
+enum QuoteStatus {
+  PENDING
+  REVIEWING
+  SENT
+  APPROVED
+  ARCHIVED
+  DECLINED
+  ARTWORK_PENDING
+  ARTWORK_APPROVED
+  ARTWORK_DECLINED
 }
 
-// ===========================================
-// Analytics: Daily Aggregates (for fast queries)
-// ===========================================
-
-model DailyAnalytics {
-  id              String   @id @default(cuid())
-  date            DateTime @db.Date
-  // Traffic metrics
-  pageViews       Int      @default(0)
-  uniqueVisitors  Int      @default(0)
-  newVisitors     Int      @default(0)
-  returningVisitors Int    @default(0)
-  // Engagement metrics
-  avgSessionDuration Int   @default(0)  // In seconds
-  avgPageViews    Decimal  @default(0)
-  bounceRate      Decimal  @default(0)  // Percentage
-  // Conversion metrics
-  quotesStarted   Int      @default(0)
-  quotesSubmitted Int      @default(0)
-  quotesApproved  Int      @default(0)
-  conversionRate  Decimal  @default(0)
-  // Product metrics
-  productViews    Int      @default(0)
-  topProducts     Json?    // Array of {productId, views}
-  // Geographic breakdown
-  topCountries    Json?    // Array of {country, count}
-  // Device breakdown
-  desktopVisits   Int      @default(0)
-  mobileVisits    Int      @default(0)
-  tabletVisits    Int      @default(0)
-  // Revenue (if quotes approved)
-  quotesValue     Decimal  @default(0) @db.Money
-
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@unique([date])
-  @@index([date(sort: Desc)])
+enum SanMarSyncStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
 }
 
-// ===========================================
-// Analytics: Entity Activity Tracking
-// ===========================================
-
-enum EntityType {
-  PRODUCT
-  VENDOR
-  QUOTE
-  CUSTOMER
-  CATEGORY
-  USER
-}
-
-enum ActivityType {
-  CREATED
-  UPDATED
-  DELETED
-  VIEWED
-  PUBLISHED
-  UNPUBLISHED
-  STATUS_CHANGED
-}
-
-model EntityActivity {
-  id          String       @id @default(cuid())
-  entityType  EntityType
-  entityId    String
-  activityType ActivityType
-  // Actor info
-  userId      String?
-  sessionId   String?
-  ipAddress   String?
-  // Change details
-  oldValue    Json?
-  newValue    Json?
-  metadata    Json?
-  createdAt   DateTime     @default(now())
-
-  @@index([entityType])
-  @@index([entityId])
-  @@index([activityType])
-  @@index([createdAt(sort: Desc)])
-  @@index([userId])
-}
-
-enum AdminRole {
-  SUPER_ADMIN
-  ADMIN
-  EDITOR
-}
-
-// ===========================================
-// Notifications & Email Settings
-// ===========================================
-
-enum NotificationChannel {
-  EMAIL
-  SMS
-}
-
-enum NotificationType {
-  // Internal notifications
-  INTERNAL_QUOTE_CREATED
-  INTERNAL_QUOTE_STATUS_CHANGE
-  INTERNAL_USER_VERIFICATION
-  INTERNAL_ARTWORK_RESPONSE      // Notify admin when customer responds to artwork
-  // External (customer) notifications
-  CUSTOMER_QUOTE_SENT
-  CUSTOMER_QUOTE_STATUS_CHANGE
-  CUSTOMER_ARTWORK_APPROVAL      // Send artwork for customer approval
-}
-
-model NotificationSetting {
-  id              String              @id @default(cuid())
-  type            NotificationType    @unique
-  name            String
-  description     String?
-  channel         NotificationChannel @default(EMAIL)
-  enabled         Boolean             @default(false)
-
-  // Email template settings
-  subject         String?
-  bodyTemplate    String?             // HTML template with placeholders
-
-  // Recipients for internal notifications
-  recipientEmails String[]            // For internal notifications
-
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-
-  @@index([type])
-  @@index([enabled])
-}
-
-model EmailConfig {
-  id              Int      @id @default(1)
-  provider        String   @default("gmail")  // gmail, smtp, sendgrid, etc.
-
-  // Gmail API settings
-  gmailClientId       String?
-  gmailClientSecret   String?
-  gmailRefreshToken   String?
-  gmailAccessToken    String?
-  gmailTokenExpiry    DateTime?
-
-  // Sender settings
-  fromName        String   @default("Logoz Custom")
-  fromEmail       String?
-  replyToEmail    String?
-
-  // Status
-  isConfigured    Boolean  @default(false)
-  lastTestedAt    DateTime?
-  lastTestStatus  String?
-
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-}
-
-model SmsConfig {
-  id              Int      @id @default(1)
-  provider        String   @default("twilio")  // twilio, etc.
-
-  // Twilio settings (for future use)
-  accountSid      String?
-  authToken       String?
-  fromNumber      String?
-
-  // Status
-  isConfigured    Boolean  @default(false)
-  lastTestedAt    DateTime?
-  lastTestStatus  String?
-
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-}
-
-model NotificationLog {
-  id              String              @id @default(cuid())
-  type            NotificationType
-  channel         NotificationChannel
-
-  // Recipient info
-  recipientEmail  String?
-  recipientPhone  String?
-  recipientName   String?
-
-  // Content
-  subject         String?
-  body            String?
-
-  // Status
-  status          String              @default("pending")  // pending, sent, failed
-  errorMessage    String?
-  sentAt          DateTime?
-
-  // Related entities
-  quoteId         String?
-  customerId      String?
-  userId          String?
-
-  createdAt       DateTime            @default(now())
-
-  @@index([type])
-  @@index([status])
-  @@index([createdAt(sort: Desc)])
-  @@index([quoteId])
-  @@index([customerId])
+enum SanMarSyncType {
+  BULK
+  DELTA
+  INVENTORY
+  PRICING
+  MEDIA
 }

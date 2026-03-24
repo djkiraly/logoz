@@ -58,7 +58,15 @@
       "Bash(copy:*)",
       "Bash(cmd /c copy /Y \"D:\\Projects\\Logoz\\src\\lib\\notifications.ts\" \"D:\\Projects\\Logoz\\web\\src\\lib\\notifications.ts\")",
       "Bash(cmd /c copy:*)",
-      "Bash(cmd /c dir \"D:\\Projects\\Logoz\\web\\src\\app\\admin\\quotes\\page.tsx\")"
+      "Bash(cmd /c dir \"D:\\Projects\\Logoz\\web\\src\\app\\admin\\quotes\\page.tsx\")",
+      "Bash(npx prisma format)",
+      "Bash(npx prisma migrate dev:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(timeout 30 npx next dev:*)",
+      "Bash(npx prisma:*)",
+      "Bash(timeout 15 npm run dev:*)",
+      "Bash(npx next lint:*)",
+      "Bash(npx next build:*)"
     ],
     "deny": [],
     "ask": []
