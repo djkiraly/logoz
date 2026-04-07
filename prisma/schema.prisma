@@ -435,8 +435,9 @@ model Quote {
   updatedAt         DateTime @updatedAt
   ownerId           String?
   lastModifiedAt    DateTime        @default(now())
-  accessToken       String?         @unique
-  declinedAt        DateTime?
+  accessToken          String?         @unique
+  accessTokenExpiresAt DateTime?
+  declinedAt           DateTime?
   discountValue     Decimal         @default(0)
   artworkApprovedAt DateTime?
   artworkDeclinedAt DateTime?
@@ -444,8 +445,9 @@ model Quote {
   artworkNotes      String?
   artworkRequired   Boolean         @default(false)
   artworkSentAt     DateTime?
-  artworkToken      String?         @unique
-  artworkUrl        String?
+  artworkToken          String?         @unique
+  artworkTokenExpiresAt DateTime?
+  artworkUrl            String?
   artworkVersion    Int             @default(1)
   customer          Customer?       @relation(fields: [customerId], references: [id])
   owner             AdminUser?      @relation(fields: [ownerId], references: [id])

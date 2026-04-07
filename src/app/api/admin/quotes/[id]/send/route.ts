@@ -311,7 +311,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       accessToken = generateAccessToken();
       await prisma.quote.update({
         where: { id },
-        data: { accessToken },
+        data: {
+          accessToken,
+          accessTokenExpiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), // 90 days
+        },
       });
     }
 

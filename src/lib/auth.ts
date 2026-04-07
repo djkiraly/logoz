@@ -1,14 +1,16 @@
 import { cookies } from 'next/headers';
+import bcrypt from 'bcryptjs';
 import { prisma, isDatabaseEnabled } from './prisma';
 import { adminLogger } from './logger';
 
 const SESSION_COOKIE_NAME = 'logoz_admin_session';
 const SESSION_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
+const BCRYPT_ROUNDS = 12;
 
 /**
- * Hash a password using Web Crypto API (no external dependencies)
+ * Legacy SHA-256 hash (used only for migration from old hashes)
  */
-export async function hashPassword(password: string): Promise<string> {
+async function hashPasswordLegacySha256(password: string): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(password);
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
@@ -17,14 +19,30 @@ export async function hashPassword(password: string): Promise<string> {
 }
 
 /**
- * Verify a password against a hash
+ * Hash a password using bcrypt
+ */
+export async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, BCRYPT_ROUNDS);
+}
+
+/**
+ * Verify a password against a hash.
+ * Supports both bcrypt and legacy SHA-256 hashes for migration.
  */
 export async function verifyPassword(
   password: string,
   hash: string
-): Promise<boolean> {
-  const passwordHash = await hashPassword(password);
-  return passwordHash === hash;
+): Promise<{ valid: boolean; needsRehash: boolean }> {
+  // Bcrypt hashes start with $2a$ or $2b$
+  if (hash.startsWith('$2a$') || hash.startsWith('$2b$')) {
+    const valid = await bcrypt.compare(password, hash);
+    return { valid, needsRehash: false };
+  }
+
+  // Legacy SHA-256 hash — verify and flag for rehash
+  const legacyHash = await hashPasswordLegacySha256(password);
+  const valid = legacyHash === hash;
+  return { valid, needsRehash: valid };
 }
 
 /**
@@ -215,6 +233,22 @@ export async function logAuditEvent(
       error: error instanceof Error ? error.message : String(error),
     });
   }
+}
+
+/**
+ * Role hierarchy for authorization checks
+ */
+const ROLE_HIERARCHY: Record<string, number> = {
+  EDITOR: 0,
+  ADMIN: 1,
+  SUPER_ADMIN: 2,
+};
+
+/**
+ * Check if a user's role meets the minimum required role
+ */
+export function requireRole(user: { role: string }, minimumRole: string): boolean {
+  return (ROLE_HIERARCHY[user.role] ?? -1) >= (ROLE_HIERARCHY[minimumRole] ?? 99);
 }
 
 export { SESSION_COOKIE_NAME };

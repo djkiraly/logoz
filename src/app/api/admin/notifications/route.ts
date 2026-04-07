@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUser, requireRole } from '@/lib/auth';
 import { prisma, isDatabaseEnabled } from '@/lib/prisma';
 import { adminLogger } from '@/lib/logger';
 import { initializeNotificationSettings } from '@/lib/notifications';
@@ -10,6 +10,10 @@ export async function GET() {
     const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (!requireRole(user, 'ADMIN')) {
+      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 
     if (!isDatabaseEnabled) {
@@ -31,6 +35,7 @@ export async function GET() {
           gmailClientId: true,
           gmailClientSecret: true,
           gmailRefreshToken: true,
+          gmailAccessToken: true,
           fromName: true,
           fromEmail: true,
           replyToEmail: true,
@@ -56,10 +61,12 @@ export async function GET() {
       }),
     ]);
 
-    // Only mask tokens, not credentials (admin-only endpoint)
+    // Mask all sensitive credentials in API response
     const processedEmailConfig = emailConfig ? {
       ...emailConfig,
+      gmailClientSecret: emailConfig.gmailClientSecret ? '••••••••' : null,
       gmailRefreshToken: emailConfig.gmailRefreshToken ? '••••••••' : null,
+      gmailAccessToken: emailConfig.gmailAccessToken ? '••••••••' : null,
     } : null;
 
     return NextResponse.json({
@@ -85,6 +92,10 @@ export async function POST(request: NextRequest) {
     const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (!requireRole(user, 'ADMIN')) {
+      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 
     if (!isDatabaseEnabled) {

@@ -1,9 +1,10 @@
 {
   "name": "web",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "scripts": {
     "postinstall": "prisma generate",
+    "prepare": "bash scripts/setup-hooks.sh 2>/dev/null || true",
     "dev": "next dev",
     "build": "prisma generate && next build",
     "start": "next start -p ${PORT:-3000}",
@@ -26,17 +27,15 @@
     "@prisma/client": "^6.19.0",
     "@tanstack/react-query": "^5.90.9",
     "@vercel/postgres": "^0.10.0",
-    "claude": "^0.1.1",
+    "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
     "lru-cache": "^11.2.4",
     "lucide-react": "^0.553.0",
     "next": "^16.1.1",
-    "ngrok": "^5.0.0-beta.2",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-is": "^19.2.1",
     "recharts": "^3.5.1",
-    "upgrade": "^1.1.0",
     "zod": "^4.1.12"
   },
   "devDependencies": {
@@ -44,6 +43,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -58,6 +58,7 @@
     "tailwindcss": "^4",
     "tsx": "^4.20.6",
     "typescript": "^5",
+    "ngrok": "^5.0.0-beta.2",
     "vitest": "^4.0.14"
   }
 }

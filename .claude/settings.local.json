@@ -66,7 +66,9 @@
       "Bash(npx prisma:*)",
       "Bash(timeout 15 npm run dev:*)",
       "Bash(npx next lint:*)",
-      "Bash(npx next build:*)"
+      "Bash(npx next build:*)",
+      "Bash(git stash:*)",
+      "Bash(chmod +x:*)"
     ],
     "deny": [],
     "ask": []

@@ -3,13 +3,14 @@ import { z } from 'zod';
 import { prisma, isDatabaseEnabled } from '@/lib/prisma';
 import {
   verifyPassword,
+  hashPassword,
   createSession,
   setSessionCookie,
   logAuditEvent,
 } from '@/lib/auth';
 import { handleApiError, ApiException } from '@/lib/api-utils';
 import { createRequestLogger } from '@/lib/logger';
-import { getClientIp } from '@/lib/rate-limit';
+import { checkRateLimit, getClientIp, getRateLimitHeaders } from '@/lib/rate-limit';
 import { isEmailVerificationEnabled } from '@/lib/email-verification';
 import { verifyRecaptcha, isRecaptchaEnabled } from '@/lib/recaptcha';
 
@@ -26,6 +27,21 @@ export async function POST(request: Request) {
   try {
     if (!isDatabaseEnabled) {
       throw new ApiException('Database not configured', 503, 'SERVICE_UNAVAILABLE');
+    }
+
+    // Rate limit login attempts
+    const clientIpForRateLimit = getClientIp(request);
+    const rateLimitResult = await checkRateLimit(`login:${clientIpForRateLimit}`, {
+      interval: 15 * 60 * 1000, // 15 minutes
+      maxRequests: 10,
+    });
+
+    if (!rateLimitResult.success) {
+      reqLogger.warn('Login rate limit exceeded', { ip: clientIpForRateLimit });
+      return NextResponse.json(
+        { error: 'Too many login attempts. Please try again later.', code: 'RATE_LIMIT_EXCEEDED' },
+        { status: 429, headers: getRateLimitHeaders(rateLimitResult) }
+      );
     }
 
     const body = await request.json();
@@ -79,11 +95,21 @@ export async function POST(request: Request) {
     }
 
     // Verify password
-    const isValidPassword = await verifyPassword(password, user.passwordHash);
+    const { valid: isValidPassword, needsRehash } = await verifyPassword(password, user.passwordHash);
 
     if (!isValidPassword) {
       reqLogger.warn('Login failed: invalid password', { userId: user.id });
       throw new ApiException('Invalid email or password', 401, 'INVALID_CREDENTIALS');
+    }
+
+    // Migrate legacy SHA-256 hash to bcrypt on successful login
+    if (needsRehash) {
+      const newHash = await hashPassword(password);
+      await prisma.adminUser.update({
+        where: { id: user.id },
+        data: { passwordHash: newHash },
+      });
+      reqLogger.info('Migrated password hash to bcrypt', { userId: user.id });
     }
 
     // Check email verification (only if verification is enabled)

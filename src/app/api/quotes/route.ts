@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { FulfillmentMethod } from '@prisma/client';
-import { quoteSchema } from '@/lib/validation';
+import { quoteSchema, containsSuspiciousContent, sanitizeInput } from '@/lib/validation';
 import { isDatabaseEnabled, prisma } from '@/lib/prisma';
 import {
   checkRateLimit,
@@ -93,6 +93,18 @@ export async function POST(request: Request) {
     }
 
     const payload = parsed.data;
+
+    // Check for suspicious content (XSS, script injection)
+    const textFields = [payload.name, payload.company, payload.notes].filter(Boolean) as string[];
+    if (textFields.some(field => containsSuspiciousContent(field))) {
+      reqLogger.warn('Suspicious content detected in quote request', { clientIp });
+      throw new ApiException('Input contains disallowed content', 400, 'SUSPICIOUS_INPUT');
+    }
+
+    // Sanitize text inputs
+    payload.name = sanitizeInput(payload.name);
+    if (payload.company) payload.company = sanitizeInput(payload.company);
+    if (payload.notes) payload.notes = sanitizeInput(payload.notes);
 
     if (isDatabaseEnabled) {
       // Check for duplicate quote in last 5 minutes

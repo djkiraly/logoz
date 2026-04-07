@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
 import { z } from 'zod';
 import { prisma, isDatabaseEnabled } from '@/lib/prisma';
-import { getCurrentUser, logAuditEvent } from '@/lib/auth';
+import { getCurrentUser, logAuditEvent, requireRole } from '@/lib/auth';
 import { handleApiError, ApiException } from '@/lib/api-utils';
 import { getClientIp } from '@/lib/rate-limit';
 
@@ -54,6 +54,10 @@ export async function GET() {
     const user = await getCurrentUser();
     if (!user) {
       throw new ApiException('Unauthorized', 401, 'UNAUTHORIZED');
+    }
+
+    if (!requireRole(user, 'ADMIN')) {
+      throw new ApiException('Insufficient permissions', 403, 'FORBIDDEN');
     }
 
     if (!isDatabaseEnabled) {

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
 import { z } from 'zod';
 import { prisma, isDatabaseEnabled } from '@/lib/prisma';
-import { getCurrentUser, logAuditEvent } from '@/lib/auth';
+import { getCurrentUser, logAuditEvent, requireRole } from '@/lib/auth';
 import { handleApiError, ApiException } from '@/lib/api-utils';
 import { createRequestLogger } from '@/lib/logger';
 import { getClientIp } from '@/lib/rate-limit';

@@ -208,7 +208,10 @@ export async function POST(request: Request, context: RouteContext) {
         artworkApprovedAt: null, // Reset approval when new artwork uploaded
         artworkDeclinedAt: null,
         artworkNotes: null,
-        ...(artworkToken && { artworkToken }),
+        ...(artworkToken && {
+          artworkToken,
+          artworkTokenExpiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), // 90 days
+        }),
         lastModifiedAt: new Date(),
       },
       select: {

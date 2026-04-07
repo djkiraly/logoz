@@ -6,6 +6,38 @@ const SESSION_COOKIE_NAME = 'logoz_admin_session';
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Handle CORS for API routes
+  if (pathname.startsWith('/api')) {
+    const origin = request.headers.get('origin');
+    const allowedOrigins = [
+      process.env.NEXT_PUBLIC_SITE_URL,
+      process.env.SITE_URL,
+    ].filter(Boolean) as string[];
+
+    const isAllowedOrigin = origin && allowedOrigins.some(allowed => origin.startsWith(allowed));
+
+    // Handle preflight requests
+    if (request.method === 'OPTIONS') {
+      const response = new NextResponse(null, { status: 204 });
+      if (isAllowedOrigin) {
+        response.headers.set('Access-Control-Allow-Origin', origin);
+        response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+        response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+        response.headers.set('Access-Control-Allow-Credentials', 'true');
+        response.headers.set('Access-Control-Max-Age', '86400');
+      }
+      return response;
+    }
+
+    // For non-preflight API requests, continue and add CORS headers
+    const response = NextResponse.next();
+    if (isAllowedOrigin) {
+      response.headers.set('Access-Control-Allow-Origin', origin);
+      response.headers.set('Access-Control-Allow-Credentials', 'true');
+    }
+    return response;
+  }
+
   // Handle admin routes
   if (pathname.startsWith('/admin')) {
     const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
@@ -84,6 +116,6 @@ export const config = {
      * - favicon.ico (favicon file)
      * - public files (public folder)
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\..*|api/admin/auth).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\..*).*)',
   ],
 };

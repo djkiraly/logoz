@@ -45,6 +45,7 @@ export async function GET(request: Request, context: RouteContext) {
         artworkApprovedAt: true,
         artworkDeclinedAt: true,
         artworkNotes: true,
+        artworkTokenExpiresAt: true,
         status: true,
         approvedAt: true,
         declinedAt: true,
@@ -69,6 +70,11 @@ export async function GET(request: Request, context: RouteContext) {
 
     if (!quote) {
       throw new ApiException('Artwork not found or link expired', 404, 'NOT_FOUND');
+    }
+
+    // Check token expiry
+    if (quote.artworkTokenExpiresAt && new Date(quote.artworkTokenExpiresAt) < new Date()) {
+      throw new ApiException('This artwork link has expired.', 410, 'TOKEN_EXPIRED');
     }
 
     // Check if artwork was sent
@@ -150,6 +156,7 @@ export async function POST(request: Request, context: RouteContext) {
         artworkSentAt: true,
         artworkApprovedAt: true,
         artworkDeclinedAt: true,
+        artworkTokenExpiresAt: true,
         approvedAt: true,
         declinedAt: true,
         status: true,
@@ -164,6 +171,11 @@ export async function POST(request: Request, context: RouteContext) {
 
     if (!quote) {
       throw new ApiException('Artwork not found or link expired', 404, 'NOT_FOUND');
+    }
+
+    // Check token expiry
+    if (quote.artworkTokenExpiresAt && new Date(quote.artworkTokenExpiresAt) < new Date()) {
+      throw new ApiException('This artwork link has expired.', 410, 'TOKEN_EXPIRED');
     }
 
     if (!quote.artworkSentAt) {

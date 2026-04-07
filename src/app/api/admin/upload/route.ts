@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUser, requireRole } from '@/lib/auth';
 import {
   uploadFile,
   validateFileType,
@@ -14,6 +14,21 @@ import { adminLogger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
+// Magic byte signatures for file type verification
+const MAGIC_BYTES: Record<string, number[]> = {
+  'image/jpeg': [0xFF, 0xD8, 0xFF],
+  'image/png': [0x89, 0x50, 0x4E, 0x47],
+  'image/gif': [0x47, 0x49, 0x46, 0x38],
+  'application/pdf': [0x25, 0x50, 0x44, 0x46],
+};
+
+function verifyMagicBytes(buffer: Buffer, declaredType: string): boolean {
+  const signature = MAGIC_BYTES[declaredType];
+  if (!signature) return true; // Skip check for text-based formats (SVG, AI, EPS) and WebP
+  if (buffer.length < signature.length) return false;
+  return signature.every((byte, i) => buffer[i] === byte);
+}
+
 // Configure body size limit for this route
 export const maxDuration = 60; // 60 seconds timeout
 
@@ -24,6 +39,10 @@ export async function POST(request: NextRequest) {
     if (!user) {
       adminLogger.warn('Upload attempt without authentication');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (!requireRole(user, 'ADMIN')) {
+      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 
     // Check if GCS is enabled
@@ -112,6 +131,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Failed to read file data. Please try again.' },
         { status: 500 }
+      );
+    }
+
+    // Verify file content matches declared MIME type
+    if (!verifyMagicBytes(buffer, file.type)) {
+      adminLogger.warn('File magic bytes mismatch', {
+        fileName: file.name,
+        declaredType: file.type,
+        userId: user.id,
+      });
+      return NextResponse.json(
+        { error: 'File content does not match declared type. Upload rejected.' },
+        { status: 400 }
       );
     }
 

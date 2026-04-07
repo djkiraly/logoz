@@ -38,6 +38,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Quote not found' }, { status: 404 });
     }
 
+    // Check token expiry
+    if (quote.accessTokenExpiresAt && new Date(quote.accessTokenExpiresAt) < new Date()) {
+      return NextResponse.json({ error: 'This quote link has expired.' }, { status: 410 });
+    }
+
     // Don't expose internal fields
     const publicQuote = {
       id: quote.id,
@@ -114,6 +119,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (!quote) {
       return NextResponse.json({ error: 'Quote not found' }, { status: 404 });
+    }
+
+    // Check token expiry
+    if (quote.accessTokenExpiresAt && new Date(quote.accessTokenExpiresAt) < new Date()) {
+      return NextResponse.json({ error: 'This quote link has expired.' }, { status: 410 });
     }
 
     // Check if quote is in SENT status (can only approve/decline sent quotes)

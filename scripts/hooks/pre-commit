@@ -1,0 +1,36 @@
+#!/bin/bash
+# Auto-increment patch version on every commit
+
+PACKAGE_JSON="package.json"
+
+# Only bump if package.json exists
+if [ ! -f "$PACKAGE_JSON" ]; then
+  exit 0
+fi
+
+# Get current version
+CURRENT_VERSION=$(node -p "require('./package.json').version")
+
+if [ -z "$CURRENT_VERSION" ]; then
+  exit 0
+fi
+
+# Split into major.minor.patch
+IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+
+# Increment patch
+PATCH=$((PATCH + 1))
+NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+
+# Update package.json using node (cross-platform, preserves formatting)
+node -e "
+const fs = require('fs');
+const pkg = fs.readFileSync('$PACKAGE_JSON', 'utf8');
+const updated = pkg.replace(/\"version\": \"${CURRENT_VERSION}\"/, '\"version\": \"${NEW_VERSION}\"');
+fs.writeFileSync('$PACKAGE_JSON', updated);
+"
+
+# Stage the updated package.json
+git add "$PACKAGE_JSON"
+
+echo "Version bumped: ${CURRENT_VERSION} -> ${NEW_VERSION}"
