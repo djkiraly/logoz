@@ -19,7 +19,7 @@ import {
   Truck,
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, startTransition } from 'react';
 
 type AdminUser = {
   id: string;
@@ -34,6 +34,87 @@ type NavItem = {
   icon: React.ComponentType<{ className?: string }>;
   badge?: number;
 };
+
+function isActive(pathname: string, href: string) {
+  if (href === '/admin') {
+    return pathname === '/admin';
+  }
+  return pathname.startsWith(href);
+}
+
+function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
+  const active = isActive(pathname, item.href);
+  return (
+    <Link
+      href={item.href}
+      className={clsx(
+        'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all',
+        active
+          ? 'bg-cyan-500/20 text-cyan-400'
+          : 'text-slate-400 hover:text-white hover:bg-white/5'
+      )}
+    >
+      <item.icon className="w-5 h-5" />
+      {item.name}
+      {item.badge && (
+        <span className="ml-auto bg-cyan-500 text-white text-xs px-2 py-0.5 rounded-full">
+          {item.badge}
+        </span>
+      )}
+    </Link>
+  );
+}
+
+function SidebarContent({ user, pathname }: { user: AdminUser; pathname: string }) {
+  return (
+    <>
+      {/* Logo */}
+      <div className="flex items-center gap-3 px-4 py-6 border-b border-white/10">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
+          <span className="text-white font-bold text-lg">L</span>
+        </div>
+        <div>
+          <h1 className="text-white font-semibold">Logoz Admin</h1>
+          <p className="text-xs text-slate-500">Control Panel</p>
+        </div>
+      </div>
+
+      {/* Main Navigation */}
+      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+          Main
+        </p>
+        {navigation.map((item) => (
+          <NavLink key={item.name} item={item} pathname={pathname} />
+        ))}
+
+        <div className="pt-4 mt-4 border-t border-white/10">
+          <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+            System
+          </p>
+          {secondaryNavigation.map((item) => (
+            <NavLink key={item.name} item={item} pathname={pathname} />
+          ))}
+        </div>
+      </nav>
+
+      {/* User Info */}
+      <div className="p-4 border-t border-white/10">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+            <span className="text-white font-medium">
+              {user.name.charAt(0).toUpperCase()}
+            </span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-white truncate">{user.name}</p>
+            <p className="text-xs text-slate-500 truncate">{user.role}</p>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
 
 const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
@@ -60,87 +141,8 @@ export default function AdminSidebar({ user }: { user: AdminUser }) {
 
   // Close mobile menu on route change
   useEffect(() => {
-    setIsMobileOpen(false);
+    startTransition(() => setIsMobileOpen(false));
   }, [pathname]);
-
-  const isActive = (href: string) => {
-    if (href === '/admin') {
-      return pathname === '/admin';
-    }
-    return pathname.startsWith(href);
-  };
-
-  const NavLink = ({ item }: { item: NavItem }) => {
-    const active = isActive(item.href);
-    return (
-      <Link
-        href={item.href}
-        className={clsx(
-          'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all',
-          active
-            ? 'bg-cyan-500/20 text-cyan-400'
-            : 'text-slate-400 hover:text-white hover:bg-white/5'
-        )}
-      >
-        <item.icon className="w-5 h-5" />
-        {item.name}
-        {item.badge && (
-          <span className="ml-auto bg-cyan-500 text-white text-xs px-2 py-0.5 rounded-full">
-            {item.badge}
-          </span>
-        )}
-      </Link>
-    );
-  };
-
-  const SidebarContent = () => (
-    <>
-      {/* Logo */}
-      <div className="flex items-center gap-3 px-4 py-6 border-b border-white/10">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
-          <span className="text-white font-bold text-lg">L</span>
-        </div>
-        <div>
-          <h1 className="text-white font-semibold">Logoz Admin</h1>
-          <p className="text-xs text-slate-500">Control Panel</p>
-        </div>
-      </div>
-
-      {/* Main Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-          Main
-        </p>
-        {navigation.map((item) => (
-          <NavLink key={item.name} item={item} />
-        ))}
-
-        <div className="pt-4 mt-4 border-t border-white/10">
-          <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-            System
-          </p>
-          {secondaryNavigation.map((item) => (
-            <NavLink key={item.name} item={item} />
-          ))}
-        </div>
-      </nav>
-
-      {/* User Info */}
-      <div className="p-4 border-t border-white/10">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-            <span className="text-white font-medium">
-              {user.name.charAt(0).toUpperCase()}
-            </span>
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white truncate">{user.name}</p>
-            <p className="text-xs text-slate-500 truncate">{user.role}</p>
-          </div>
-        </div>
-      </div>
-    </>
-  );
 
   return (
     <>
@@ -171,14 +173,14 @@ export default function AdminSidebar({ user }: { user: AdminUser }) {
             >
               <X className="w-5 h-5" />
             </button>
-            <SidebarContent />
+            <SidebarContent user={user} pathname={pathname} />
           </div>
         </div>
       )}
 
       {/* Desktop Sidebar */}
       <div className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:w-64 lg:flex-col bg-slate-900 border-r border-white/10">
-        <SidebarContent />
+        <SidebarContent user={user} pathname={pathname} />
       </div>
     </>
   );

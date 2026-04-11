@@ -44,8 +44,8 @@ export function DailyViewsChart({
 }: {
   data: Array<{ date: string; views: number; visitors: number }>;
 }) {
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
+  const formatDate = (dateStr: unknown) => {
+    const date = new Date(String(dateStr));
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
@@ -142,10 +142,10 @@ export function DeviceBreakdownChart({
         </Pie>
         <Tooltip
           contentStyle={customTooltipStyle}
-          formatter={(value: number | undefined) => [
-            `${(value ?? 0).toLocaleString()} (${(((value ?? 0) / total) * 100).toFixed(1)}%)`,
-            'Visits',
-          ]}
+          formatter={(value) => {
+            const num = Number(value ?? 0);
+            return [`${num.toLocaleString()} (${((num / total) * 100).toFixed(1)}%)`, 'Visits'];
+          }}
         />
       </PieChart>
     </ResponsiveContainer>
@@ -180,7 +180,7 @@ export function BrowserChart({
         />
         <Tooltip
           contentStyle={customTooltipStyle}
-          formatter={(value: number | undefined) => [(value ?? 0).toLocaleString(), 'Views']}
+          formatter={(value) => [Number(value ?? 0).toLocaleString(), 'Views']}
         />
         <Bar dataKey="count" fill={COLORS.primary} radius={[0, 4, 4, 0]} />
       </BarChart>
@@ -300,10 +300,10 @@ export function QuoteStatusChart({
         </Pie>
         <Tooltip
           contentStyle={customTooltipStyle}
-          formatter={(value: number | undefined) => [
-            `${value ?? 0} (${(((value ?? 0) / total) * 100).toFixed(1)}%)`,
-            'Quotes',
-          ]}
+          formatter={(value) => {
+            const num = Number(value ?? 0);
+            return [`${num} (${((num / total) * 100).toFixed(1)}%)`, 'Quotes'];
+          }}
         />
         <Legend
           formatter={(value) => (
@@ -348,7 +348,7 @@ export function TopProductsChart({
         />
         <Tooltip
           contentStyle={customTooltipStyle}
-          formatter={(value: number | undefined) => [(value ?? 0).toLocaleString(), 'Views']}
+          formatter={(value) => [Number(value ?? 0).toLocaleString(), 'Views']}
         />
         <Bar dataKey="views" fill={COLORS.secondary} radius={[0, 4, 4, 0]} />
       </BarChart>
@@ -363,8 +363,8 @@ export function PerformanceChart({
   data: Array<{ date: string; value: number }>;
   label?: string;
 }) {
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
+  const formatDate = (dateStr: unknown) => {
+    const date = new Date(String(dateStr));
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 

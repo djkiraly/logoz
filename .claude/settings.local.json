@@ -68,7 +68,13 @@
       "Bash(npx next lint:*)",
       "Bash(npx next build:*)",
       "Bash(git stash:*)",
-      "Bash(chmod +x:*)"
+      "Bash(chmod +x:*)",
+      "Bash(npm list:*)",
+      "Bash(npx npm-audit-signatures:*)",
+      "Bash(npm audit:*)",
+      "Bash(npm prune:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(npm test:*)"
     ],
     "deny": [],
     "ask": []

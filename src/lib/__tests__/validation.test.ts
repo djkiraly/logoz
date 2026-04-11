@@ -14,7 +14,7 @@ describe('Quote Validation Schema', () => {
     phone: '+1 (555) 123-4567',
     quantity: 50,
     service: 'SCREEN_PRINT' as const,
-    dueDate: '2025-12-31',
+    dueDate: '2027-12-31',
     notes: 'Please rush this order',
   };
 

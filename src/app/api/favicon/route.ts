@@ -17,7 +17,7 @@ export async function GET() {
 
     // If custom favicon is set, redirect to it
     if (faviconUrl) {
-      return NextResponse.redirect(new URL(faviconUrl, process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'), {
+      return NextResponse.redirect(new URL(faviconUrl, process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'), {
         headers: {
           'Cache-Control': 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800',
         },
@@ -25,7 +25,7 @@ export async function GET() {
     }
 
     // Otherwise, redirect to the default favicon
-    return NextResponse.redirect(new URL('/favicon.ico', process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'), {
+    return NextResponse.redirect(new URL('/favicon.ico', process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'), {
       headers: {
         'Cache-Control': 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800',
       },
@@ -33,6 +33,6 @@ export async function GET() {
   } catch (error) {
     console.error('Error fetching favicon:', error);
     // Fallback to default favicon on error
-    return NextResponse.redirect(new URL('/favicon.ico', process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'));
+    return NextResponse.redirect(new URL('/favicon.ico', process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'));
   }
 }

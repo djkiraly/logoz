@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Stale copy of source — lint only src/
+    "web/**",
   ]),
 ]);
 

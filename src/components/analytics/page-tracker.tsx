@@ -15,7 +15,7 @@ export function PageTracker() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const pageViewId = useRef<string | null>(null);
-  const startTime = useRef<number>(Date.now());
+  const startTime = useRef<number>(0);
   const maxScrollDepth = useRef<number>(0);
   const heartbeatInterval = useRef<NodeJS.Timeout | null>(null);
 
