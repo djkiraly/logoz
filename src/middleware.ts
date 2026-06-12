@@ -115,7 +115,10 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - public files (public folder)
+     * - api/admin/sanmar/catalog (large streaming upload — must NOT be proxied,
+     *   or Next buffers the whole request body in memory and caps it at
+     *   proxyClientMaxBodySize/10MB, truncating big catalog files)
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\..*).*)',
+    '/((?!_next/static|_next/image|favicon.ico|api/admin/sanmar/catalog|.*\\..*).*)',
   ],
 };
