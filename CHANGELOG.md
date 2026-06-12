@@ -38,6 +38,14 @@ workflows. Findings came from a workflow audit; tracked as P0/P1/P2.
 - Configure `next.config.ts` `images.remotePatterns` for `cdnm.sanmar.com` and
   `cdn.sanmar.com` so synced SanMar product images render via `next/image`.
 
+### Order/fulfillment lifecycle
+- Add downstream order states to `QuoteStatus`: `IN_PRODUCTION`, `FULFILLED`,
+  `SHIPPED`, `COMPLETED` (an approved quote can now progress through
+  fulfillment). **Requires `prisma db push`.**
+- Advance a linked customer from `LEAD`/`PROSPECT` to `ACTIVE` on their first
+  approved quote (`lib/customer-status.ts`), applied across the admin status
+  change and both customer approval paths.
+
 ### Validation & data integrity
 - Validate admin quote create/update payloads with a Zod schema
   (`quoteMutationSchema`): non-negative bounds on discount/taxRate/shipping and

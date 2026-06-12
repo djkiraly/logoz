@@ -11,6 +11,7 @@ import {
   logQuoteDeclinedByCustomer,
 } from '@/lib/quote-audit';
 import { notifyArtworkResponse, notifyQuoteOwnerStatusChange } from '@/lib/notifications';
+import { activateCustomerOnApproval } from '@/lib/customer-status';
 
 export const dynamic = 'force-dynamic';
 
@@ -165,6 +166,7 @@ export async function POST(request: Request, context: RouteContext) {
         approvedAt: true,
         declinedAt: true,
         status: true,
+        customerId: true,
         customerName: true,
         customerCompany: true,
         customerEmail: true,
@@ -268,6 +270,11 @@ export async function POST(request: Request, context: RouteContext) {
         type: 'CUSTOMER',
         email: customerEmail,
       });
+
+      // Promote the linked customer from LEAD/PROSPECT to ACTIVE on approval.
+      if (isApproved) {
+        await activateCustomerOnApproval(quote.customerId);
+      }
 
       // Notify the quote owner that the customer approved/declined.
       if (quote.owner?.email) {

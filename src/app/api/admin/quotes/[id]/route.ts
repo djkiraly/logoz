@@ -16,6 +16,7 @@ import {
 } from '@/lib/quote-audit';
 import { notifyQuoteStatusChange } from '@/lib/notifications';
 import { quoteMutationSchema } from '@/lib/validation';
+import { activateCustomerOnApproval } from '@/lib/customer-status';
 
 type RouteParams = {
   params: Promise<{ id: string }>;
@@ -451,6 +452,11 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         existingQuote.status,
         status
       );
+
+      // Promote the linked customer to ACTIVE when a quote is approved.
+      if (status === 'APPROVED') {
+        await activateCustomerOnApproval(quote.customerId);
+      }
     } else {
       // Track general update
       await trackEntityActivity({

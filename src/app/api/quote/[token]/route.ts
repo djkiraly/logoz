@@ -4,6 +4,7 @@ import { adminLogger } from '@/lib/logger';
 import { trackEntityActivity, trackQuoteFunnelEvent } from '@/lib/analytics';
 import { notifyQuoteOwnerStatusChange } from '@/lib/notifications';
 import { logQuoteStatusChange } from '@/lib/quote-audit';
+import { activateCustomerOnApproval } from '@/lib/customer-status';
 
 type RouteParams = {
   params: Promise<{ token: string }>;
@@ -207,6 +208,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       quoteId: quote.id,
       customerId: quote.customerId || undefined,
     });
+
+    // Promote the linked customer from LEAD/PROSPECT to ACTIVE on approval.
+    if (action === 'approve') {
+      await activateCustomerOnApproval(quote.customerId);
+    }
 
     // Notify quote owner of the status change
     if (quote.owner) {

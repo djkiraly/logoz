@@ -865,6 +865,11 @@ enum QuoteStatus {
   ARTWORK_PENDING
   ARTWORK_APPROVED
   ARTWORK_DECLINED
+  // Order/fulfillment states (downstream of an approved quote)
+  IN_PRODUCTION
+  FULFILLED
+  SHIPPED
+  COMPLETED
 }
 
 enum SanMarSyncStatus {
