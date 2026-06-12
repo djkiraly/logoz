@@ -38,6 +38,15 @@ workflows. Findings came from a workflow audit; tracked as P0/P1/P2.
 - Configure `next.config.ts` `images.remotePatterns` for `cdnm.sanmar.com` and
   `cdn.sanmar.com` so synced SanMar product images render via `next/image`.
 
+### SanMar sync robustness
+- Honor the `dryRun`, `updateExisting`, and `markupPercent` sync options that
+  the API accepted but `product-sync.ts` ignored: `dryRun` previews without
+  writing, `updateExisting: false` skips existing products, and `markupPercent`
+  is applied to product/variant sell prices.
+- `executeSoapRequest` now uses a 30s `AbortController` timeout plus bounded
+  exponential-backoff retries on timeouts and transient 5xx/408/429 responses.
+- Throttle category/brand syncs between batches to respect SanMar rate limits.
+
 ### Funnel & lead pipeline
 - Wire `useQuoteFunnelTracker` into the public quote form (`STARTED_QUOTE` on
   engagement, `SUBMITTED_INFO` on success). The hook was defined but never used,

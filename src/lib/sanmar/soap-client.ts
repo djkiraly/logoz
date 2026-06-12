@@ -48,28 +48,68 @@ function buildSoapEnvelope(body: string, additionalNamespaces: Record<string, st
 </soapenv:Envelope>`;
 }
 
+const SOAP_TIMEOUT_MS = 30_000; // abort a hung request after 30s
+const SOAP_MAX_RETRIES = 3; // total attempts on transient failures
+
+function isRetryableStatus(status: number): boolean {
+  return status === 408 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+}
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
 /**
- * Execute SOAP request
+ * Execute a SOAP request with a hard timeout and bounded exponential-backoff
+ * retries for transient network/5xx failures. Non-retryable errors (e.g. 4xx
+ * other than 408/429) fail fast.
  */
 async function executeSoapRequest(
   endpoint: string,
   soapAction: string,
   body: string
 ): Promise<string> {
-  const response = await fetch(endpoint.replace('?wsdl', ''), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'text/xml; charset=utf-8',
-      'SOAPAction': soapAction,
-    },
-    body,
-  });
+  const url = endpoint.replace('?wsdl', '');
+  let lastError: unknown;
 
-  if (!response.ok) {
-    throw new Error(`SOAP request failed: ${response.status} ${response.statusText}`);
+  for (let attempt = 1; attempt <= SOAP_MAX_RETRIES; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), SOAP_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/xml; charset=utf-8',
+          'SOAPAction': soapAction,
+        },
+        body,
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        if (isRetryableStatus(response.status) && attempt < SOAP_MAX_RETRIES) {
+          lastError = new Error(`SOAP request failed: ${response.status} ${response.statusText}`);
+          await sleep(2 ** attempt * 250); // 500ms, 1s, ...
+          continue;
+        }
+        throw new Error(`SOAP request failed: ${response.status} ${response.statusText}`);
+      }
+
+      return await response.text();
+    } catch (error) {
+      lastError = error;
+      const isAbort = error instanceof Error && error.name === 'AbortError';
+      // Retry on timeouts and network errors; otherwise surface immediately.
+      if (attempt < SOAP_MAX_RETRIES && (isAbort || error instanceof TypeError)) {
+        await sleep(2 ** attempt * 250);
+        continue;
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
-  return response.text();
+  throw lastError instanceof Error ? lastError : new Error('SOAP request failed after retries');
 }
 
 /**

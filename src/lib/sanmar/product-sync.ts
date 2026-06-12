@@ -94,6 +94,17 @@ function parseKeywords(keywordsString: string): string[] {
     .filter((k) => k.length > 0);
 }
 
+/** Apply an optional percentage markup to a price (no-op when markup is 0/undefined). */
+function applyMarkup(value: number | string, markupPercent?: number): number {
+  const base = typeof value === 'string' ? parseFloat(value) || 0 : value || 0;
+  if (!markupPercent) return base;
+  return Math.round(base * (1 + markupPercent / 100) * 100) / 100;
+}
+
+/** Delay between API batches to stay within SanMar rate limits. */
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+const BATCH_DELAY_MS = 250;
+
 /**
  * Sync a single product from SanMar Standard API data
  */
@@ -141,7 +152,7 @@ export async function syncProductFromStandard(
       description: productBasicInfo.productDescription,
       heroImageUrl: images.heroImage,
       gallery: images.gallery,
-      basePrice: productPriceInfo.piecePrice,
+      basePrice: applyMarkup(productPriceInfo.piecePrice, options.markupPercent),
       cost: productPriceInfo.casePrice,
       minQuantity: 1,
       category: { connect: { id: categoryId } },
@@ -161,6 +172,21 @@ export async function syncProductFromStandard(
       lastSyncedAt: new Date(),
     };
 
+    // Dry run: report what WOULD happen without writing anything.
+    if (options.dryRun) {
+      return {
+        success: true,
+        created: !existingProduct,
+        productId: existingProduct?.id,
+        variantCount: 1,
+      };
+    }
+
+    // Respect updateExisting=false: leave existing products untouched (skip).
+    if (existingProduct && options.updateExisting === false) {
+      return { success: true, created: false, variantCount: 0 };
+    }
+
     let product;
     let created = false;
 
@@ -179,7 +205,7 @@ export async function syncProductFromStandard(
     }
 
     // Sync variant for this specific color/size
-    const variantResult = await syncVariantFromStandard(product.id, productInfo);
+    const variantResult = await syncVariantFromStandard(product.id, productInfo, options.markupPercent);
 
     return {
       success: true,
@@ -206,7 +232,8 @@ export async function syncProductFromStandard(
  */
 async function syncVariantFromStandard(
   productId: string,
-  productInfo: SanMarProductInfo
+  productInfo: SanMarProductInfo,
+  markupPercent?: number
 ): Promise<{ success: boolean; count: number }> {
   const { productBasicInfo, productPriceInfo } = productInfo;
 
@@ -216,10 +243,10 @@ async function syncVariantFromStandard(
       size: productBasicInfo.size,
       sanmarUniqueKey: productBasicInfo.uniqueKey,
       sanmarCatalogColor: productBasicInfo.catalogColor,
-      piecePrice: new Prisma.Decimal(productPriceInfo.piecePrice),
+      piecePrice: new Prisma.Decimal(applyMarkup(productPriceInfo.piecePrice, markupPercent)),
       casePrice: new Prisma.Decimal(productPriceInfo.casePrice),
       salePrice: productPriceInfo.pieceSalePrice
-        ? new Prisma.Decimal(productPriceInfo.pieceSalePrice)
+        ? new Prisma.Decimal(applyMarkup(productPriceInfo.pieceSalePrice, markupPercent))
         : null,
       caseSize: productBasicInfo.caseSize,
       pieceWeight: new Prisma.Decimal(productBasicInfo.pieceWeight),
@@ -301,13 +328,23 @@ export async function syncProductFromPromoStandards(
 
     // Get MSRP price if available
     const msrpGroup = product.productPriceGroupArray?.find((g) => g.groupName === 'MSRP');
-    const basePrice = msrpGroup?.productPriceArray?.[0]?.price || 0;
+    const basePrice = applyMarkup(msrpGroup?.productPriceArray?.[0]?.price || 0, options.markupPercent);
 
     // Check if product exists
     const existingProduct = await prisma.product.findUnique({
       where: { sanmarStyleId: product.productId },
       select: { id: true },
     });
+
+    // Dry run: report without writing.
+    if (options.dryRun) {
+      return { success: true, created: !existingProduct, productId: existingProduct?.id, variantCount: 0 };
+    }
+
+    // Respect updateExisting=false.
+    if (existingProduct && options.updateExisting === false) {
+      return { success: true, created: false };
+    }
 
     const productData = {
       sku: product.productId,
@@ -511,6 +548,11 @@ export async function syncByCategory(
       // Report progress
       await updateSyncLog(logId, progress);
       onProgress?.(progress);
+
+      // Throttle between batches to respect SanMar rate limits.
+      if (i + batchSize < result.listResponse.length) {
+        await sleep(BATCH_DELAY_MS);
+      }
     }
 
     await updateSyncLog(logId, progress, SanMarSyncStatus.COMPLETED);
@@ -616,6 +658,11 @@ export async function syncByBrand(
 
       await updateSyncLog(logId, progress);
       onProgress?.(progress);
+
+      // Throttle between batches to respect SanMar rate limits.
+      if (i + batchSize < result.listResponse.length) {
+        await sleep(BATCH_DELAY_MS);
+      }
     }
 
     await updateSyncLog(logId, progress, SanMarSyncStatus.COMPLETED);
