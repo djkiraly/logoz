@@ -20,16 +20,23 @@ export const maxDuration = 300; // 5 minutes max execution time
 export async function GET(request: Request) {
   const headersList = await headers();
 
-  // Verify cron secret (Vercel sets this header)
+  // Verify cron secret (Vercel sets this header). Fail closed: if no secret is
+  // configured, refuse to run rather than leaving the sync endpoint open to the
+  // public. The check runs in every environment, not just production.
   const authHeader = headersList.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
 
-  // In production, verify the cron secret
-  if (process.env.NODE_ENV === 'production' && cronSecret) {
-    if (authHeader !== `Bearer ${cronSecret}`) {
-      adminLogger.warn('Unauthorized cron attempt');
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+  if (!cronSecret) {
+    adminLogger.error('CRON_SECRET is not configured; refusing to run SanMar cron sync');
+    return NextResponse.json(
+      { error: 'Cron not configured' },
+      { status: 503 }
+    );
+  }
+
+  if (authHeader !== `Bearer ${cronSecret}`) {
+    adminLogger.warn('Unauthorized cron attempt');
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {

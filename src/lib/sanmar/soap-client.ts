@@ -161,6 +161,21 @@ function decodeXmlEntities(str: string): string {
 }
 
 /**
+ * Encode a value for safe interpolation into a SOAP/XML request body.
+ * Prevents credentials or parameters that contain XML metacharacters
+ * (&, <, >, ", ') from breaking the envelope or injecting markup.
+ */
+function encodeXmlEntities(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+/**
  * Check for SOAP fault or error response
  */
 function checkForError(xml: string, context?: string): SanMarError | null {
@@ -225,9 +240,9 @@ export class SanMarStandardClient {
    */
   private buildAuthBlock(): string {
     return `
-      <sanMarCustomerNumber>${this.credentials.customerNumber}</sanMarCustomerNumber>
-      <sanMarUserName>${this.credentials.username}</sanMarUserName>
-      <sanMarUserPassword>${this.credentials.password}</sanMarUserPassword>
+      <sanMarCustomerNumber>${encodeXmlEntities(this.credentials.customerNumber)}</sanMarCustomerNumber>
+      <sanMarUserName>${encodeXmlEntities(this.credentials.username)}</sanMarUserName>
+      <sanMarUserPassword>${encodeXmlEntities(this.credentials.password)}</sanMarUserPassword>
     `;
   }
 
@@ -242,9 +257,9 @@ export class SanMarStandardClient {
     const body = buildSoapEnvelope(
       `<impl:getProductInfoByStyleColorSize xmlns:impl="${NAMESPACES.sanmarImpl}">
         <arg0>
-          <style>${style}</style>
-          ${color ? `<color>${color}</color>` : ''}
-          ${size ? `<size>${size}</size>` : ''}
+          <style>${encodeXmlEntities(style)}</style>
+          ${color ? `<color>${encodeXmlEntities(color)}</color>` : ''}
+          ${size ? `<size>${encodeXmlEntities(size)}</size>` : ''}
         </arg0>
         <arg1>
           ${this.buildAuthBlock()}
@@ -288,7 +303,7 @@ export class SanMarStandardClient {
     const body = buildSoapEnvelope(
       `<impl:getProductInfoByBrand xmlns:impl="${NAMESPACES.sanmarImpl}">
         <arg0>
-          <brandName>${brandName}</brandName>
+          <brandName>${encodeXmlEntities(brandName)}</brandName>
         </arg0>
         <arg1>
           ${this.buildAuthBlock()}
@@ -330,7 +345,7 @@ export class SanMarStandardClient {
     const body = buildSoapEnvelope(
       `<impl:getProductInfoByCategory xmlns:impl="${NAMESPACES.sanmarImpl}">
         <arg0>
-          <category>${category}</category>
+          <category>${encodeXmlEntities(category)}</category>
         </arg0>
         <arg1>
           ${this.buildAuthBlock()}
@@ -450,9 +465,9 @@ export class SanMarStandardClient {
     const body = buildSoapEnvelope(
       `<impl:getInventoryQtyForStyleColorSize xmlns:impl="${NAMESPACES.sanmarImpl}">
         <arg0>
-          <style>${style}</style>
-          ${color ? `<color>${color}</color>` : ''}
-          ${size ? `<size>${size}</size>` : ''}
+          <style>${encodeXmlEntities(style)}</style>
+          ${color ? `<color>${encodeXmlEntities(color)}</color>` : ''}
+          ${size ? `<size>${encodeXmlEntities(size)}</size>` : ''}
         </arg0>
         <arg1>
           ${this.buildAuthBlock()}
@@ -595,18 +610,18 @@ export class PromoStandardsClient {
     const body = buildSoapEnvelope(
       `<ns:GetProductRequest xmlns:ns="${NAMESPACES.psProduct}" xmlns:shar="${NAMESPACES.psProductShared}">
         <shar:wsVersion>2.0.0</shar:wsVersion>
-        <shar:id>${this.credentials.id}</shar:id>
-        <shar:password>${this.credentials.password}</shar:password>
+        <shar:id>${encodeXmlEntities(this.credentials.id)}</shar:id>
+        <shar:password>${encodeXmlEntities(this.credentials.password)}</shar:password>
         <shar:localizationCountry>us</shar:localizationCountry>
         <shar:localizationLanguage>en</shar:localizationLanguage>
-        <shar:productId>${productId}</shar:productId>
-        ${options?.partId ? `<shar:partId>${options.partId}</shar:partId>` : ''}
-        ${options?.colorName ? `<shar:colorName>${options.colorName}</shar:colorName>` : ''}
+        <shar:productId>${encodeXmlEntities(productId)}</shar:productId>
+        ${options?.partId ? `<shar:partId>${encodeXmlEntities(options.partId)}</shar:partId>` : ''}
+        ${options?.colorName ? `<shar:colorName>${encodeXmlEntities(options.colorName)}</shar:colorName>` : ''}
         ${options?.apparelStyle || options?.labelSize ? `
         <shar:ApparelSizeArray>
           <shar:ApparelSize>
-            ${options.apparelStyle ? `<shar:apparelStyle>${options.apparelStyle}</shar:apparelStyle>` : ''}
-            ${options.labelSize ? `<shar:labelSize>${options.labelSize}</shar:labelSize>` : ''}
+            ${options.apparelStyle ? `<shar:apparelStyle>${encodeXmlEntities(options.apparelStyle)}</shar:apparelStyle>` : ''}
+            ${options.labelSize ? `<shar:labelSize>${encodeXmlEntities(options.labelSize)}</shar:labelSize>` : ''}
           </shar:ApparelSize>
         </shar:ApparelSizeArray>
         ` : ''}
@@ -651,9 +666,9 @@ export class PromoStandardsClient {
     const body = buildSoapEnvelope(
       `<ns:GetProductSellableRequest xmlns:ns="${NAMESPACES.psProduct}" xmlns:shar="${NAMESPACES.psProductShared}">
         <shar:wsVersion>2.0.0</shar:wsVersion>
-        <shar:id>${this.credentials.id}</shar:id>
-        <shar:password>${this.credentials.password}</shar:password>
-        ${productId ? `<shar:productId>${productId}</shar:productId>` : ''}
+        <shar:id>${encodeXmlEntities(this.credentials.id)}</shar:id>
+        <shar:password>${encodeXmlEntities(this.credentials.password)}</shar:password>
+        ${productId ? `<shar:productId>${encodeXmlEntities(productId)}</shar:productId>` : ''}
         <shar:isSellable>true</shar:isSellable>
       </ns:GetProductSellableRequest>`,
       { ns: NAMESPACES.psProduct, shar: NAMESPACES.psProductShared }
@@ -699,13 +714,13 @@ export class PromoStandardsClient {
     const body = buildSoapEnvelope(
       `<ns:GetMediaContentRequest xmlns:ns="${NAMESPACES.psMedia}" xmlns:shar="${NAMESPACES.psMediaShared}">
         <shar:wsVersion>1.1.0</shar:wsVersion>
-        <shar:id>${this.credentials.id}</shar:id>
-        <shar:password>${this.credentials.password}</shar:password>
+        <shar:id>${encodeXmlEntities(this.credentials.id)}</shar:id>
+        <shar:password>${encodeXmlEntities(this.credentials.password)}</shar:password>
         <shar:cultureName>en-us</shar:cultureName>
-        <shar:mediaType>${mediaType}</shar:mediaType>
-        <shar:productId>${productId}</shar:productId>
-        ${partId ? `<shar:partId>${partId}</shar:partId>` : ''}
-        ${classType ? `<ns:classType>${classType}</ns:classType>` : ''}
+        <shar:mediaType>${encodeXmlEntities(mediaType)}</shar:mediaType>
+        <shar:productId>${encodeXmlEntities(productId)}</shar:productId>
+        ${partId ? `<shar:partId>${encodeXmlEntities(partId)}</shar:partId>` : ''}
+        ${classType ? `<ns:classType>${encodeXmlEntities(classType)}</ns:classType>` : ''}
       </ns:GetMediaContentRequest>`,
       { ns: NAMESPACES.psMedia, shar: NAMESPACES.psMediaShared }
     );

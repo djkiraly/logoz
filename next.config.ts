@@ -17,6 +17,15 @@ const nextConfig: NextConfig = {
       bodySizeLimit: '10mb',
     },
   },
+
+  // Allow remote SanMar product imagery (referenced directly from their CDN
+  // rather than stored in GCS) to be served through next/image.
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "cdnm.sanmar.com" },
+      { protocol: "https", hostname: "cdn.sanmar.com" },
+    ],
+  },
 };
 
 export default nextConfig;

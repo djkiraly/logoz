@@ -23,3 +23,17 @@ workflows. Findings came from a workflow audit; tracked as P0/P1/P2.
   authenticated user (including EDITOR) could email quotes and mint customer
   access tokens.
 - Return 404 from the quote audit endpoint for unknown quote ids.
+- Encrypt SanMar API credentials at rest with AES-256-GCM (authenticated
+  encryption) instead of a reversible XOR cipher. Saving credentials now
+  requires a non-default `SANMAR_ENCRYPTION_KEY`; legacy XOR records are still
+  readable and are re-encrypted on next save. (`lib/sanmar/config.ts`)
+- XML-escape every interpolated value (credentials, style/color/size, brand,
+  category, productId, partId, etc.) in SOAP request bodies to prevent XML
+  injection. (`lib/sanmar/soap-client.ts` `encodeXmlEntities`)
+- Fail closed on the SanMar cron endpoint: refuse to run when `CRON_SECRET` is
+  unset, and verify it in all environments (not just production).
+  (`api/cron/sanmar-sync/route.ts`)
+
+### Fixed
+- Configure `next.config.ts` `images.remotePatterns` for `cdnm.sanmar.com` and
+  `cdn.sanmar.com` so synced SanMar product images render via `next/image`.

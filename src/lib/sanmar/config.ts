@@ -3,41 +3,71 @@
  * Handles credential storage, retrieval, and encryption
  */
 
+import crypto from 'crypto';
 import { prisma } from '../prisma';
 import { adminLogger } from '../logger';
 import { SanMarCredentials, SANMAR_CATEGORIES } from './types';
 import { createSanMarClient, testSanMarConnection } from './soap-client';
 import type { SanMarSyncConfig } from '@prisma/client';
 
-// Simple encryption for credentials (in production, use a proper secret management service)
-// This provides basic obfuscation - for true security, use AWS KMS, HashiCorp Vault, etc.
-const ENCRYPTION_KEY = process.env.SANMAR_ENCRYPTION_KEY || 'default-key-change-in-production';
+// SanMar API credentials are stored encrypted at rest. We use AES-256-GCM
+// (authenticated encryption) with a key derived from SANMAR_ENCRYPTION_KEY.
+// Legacy records were stored with a reversible XOR cipher; decryptPassword
+// transparently reads both formats so old credentials keep working until the
+// next time they are saved (which re-encrypts with AES).
+const RAW_ENCRYPTION_KEY = process.env.SANMAR_ENCRYPTION_KEY || '';
+const DEFAULT_ENCRYPTION_KEY = 'default-key-change-in-production';
+const AES_PREFIX = 'v2:'; // marks AES-256-GCM payloads: v2:<iv>:<tag>:<ciphertext> (all base64)
 
-/**
- * Simple XOR-based encryption (for basic obfuscation)
- * In production, replace with proper encryption (AES-256-GCM)
- */
+function isSecureKeyConfigured(): boolean {
+  return RAW_ENCRYPTION_KEY.length > 0 && RAW_ENCRYPTION_KEY !== DEFAULT_ENCRYPTION_KEY;
+}
+
+// Derive a fixed 32-byte key from the configured secret (any length input).
+function deriveKey(): Buffer {
+  const secret = RAW_ENCRYPTION_KEY || DEFAULT_ENCRYPTION_KEY;
+  return crypto.createHash('sha256').update(secret).digest();
+}
+
 function encryptPassword(password: string): string {
-  const encoded = Buffer.from(password, 'utf-8');
-  const key = Buffer.from(ENCRYPTION_KEY, 'utf-8');
-  const result = Buffer.alloc(encoded.length);
-
-  for (let i = 0; i < encoded.length; i++) {
-    result[i] = encoded[i] ^ key[i % key.length];
+  // Refuse to persist credentials under the insecure default key.
+  if (!isSecureKeyConfigured()) {
+    throw new Error(
+      'SANMAR_ENCRYPTION_KEY is not set (or is the default). Set a strong, ' +
+        'unique value before storing SanMar credentials.'
+    );
   }
 
-  return result.toString('base64');
+  const iv = crypto.randomBytes(12); // 96-bit nonce recommended for GCM
+  const cipher = crypto.createCipheriv('aes-256-gcm', deriveKey(), iv);
+  const ciphertext = Buffer.concat([cipher.update(password, 'utf-8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+
+  return `${AES_PREFIX}${iv.toString('base64')}:${tag.toString('base64')}:${ciphertext.toString('base64')}`;
 }
 
 function decryptPassword(encrypted: string): string {
-  const encoded = Buffer.from(encrypted, 'base64');
-  const key = Buffer.from(ENCRYPTION_KEY, 'utf-8');
-  const result = Buffer.alloc(encoded.length);
+  if (encrypted.startsWith(AES_PREFIX)) {
+    const [, ivB64, tagB64, dataB64] = encrypted.split(':');
+    const decipher = crypto.createDecipheriv(
+      'aes-256-gcm',
+      deriveKey(),
+      Buffer.from(ivB64, 'base64')
+    );
+    decipher.setAuthTag(Buffer.from(tagB64, 'base64'));
+    return Buffer.concat([
+      decipher.update(Buffer.from(dataB64, 'base64')),
+      decipher.final(),
+    ]).toString('utf-8');
+  }
 
+  // Legacy XOR-encrypted payload (pre-AES). Decode with the raw key bytes.
+  const encoded = Buffer.from(encrypted, 'base64');
+  const key = Buffer.from(RAW_ENCRYPTION_KEY || DEFAULT_ENCRYPTION_KEY, 'utf-8');
+  const result = Buffer.alloc(encoded.length);
   for (let i = 0; i < encoded.length; i++) {
     result[i] = encoded[i] ^ key[i % key.length];
   }
-
   return result.toString('utf-8');
 }
 
