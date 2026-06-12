@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { title, description, imageUrl, featured } = body;
+    const { title, description, imageUrl, featured, markupPercent } = body;
 
     if (!title?.trim()) {
       return NextResponse.json({ error: 'Title is required' }, { status: 400 });
@@ -82,6 +82,10 @@ export async function POST(request: NextRequest) {
         description: description?.trim() || '',
         imageUrl: imageUrl || null,
         featured: featured || false,
+        markupPercent:
+          markupPercent === undefined || markupPercent === null || markupPercent === ''
+            ? null
+            : Number(markupPercent),
       },
       include: {
         _count: {

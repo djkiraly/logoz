@@ -125,6 +125,7 @@ model Category {
   description String
   featured    Boolean    @default(false)
   imageUrl    String?
+  markupPercent Float?
   products    Product[]
   services    Service[]
   suppliers   Supplier[] @relation("SupplierCategories")
@@ -366,6 +367,7 @@ model Product {
   featured           Boolean             @default(false)
   visible            Boolean             @default(false)
   cost               Decimal?            @db.Money
+  priceOverridden    Boolean             @default(false)
   imageSource        ImageSource         @default(LOCAL)
   keywords           String[]
   lastSyncedAt       DateTime?
@@ -626,6 +628,7 @@ model Service {
 
 model SiteSetting {
   id                 Int     @id @default(1)
+  defaultMarkupPercent Float @default(0)
   siteName           String  @default("Logoz Custom")
   heroTagline        String  @default("Cloud print operating system")
   heroHeading        String

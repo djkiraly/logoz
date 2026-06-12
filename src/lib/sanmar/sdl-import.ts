@@ -335,32 +335,49 @@ async function importStyle(
     lastSyncedAt: new Date(),
   };
 
-  const product = await prisma.product.upsert({
+  // Find-then-write so we can preserve a manually-set public price.
+  const existing = await prisma.product.findUnique({
     where: { sanmarStyleId: mapped.style },
-    create: {
-      sku: mapped.style,
-      sanmarStyleId: mapped.style,
-      minQuantity: 1,
-      visible: opts.visible ?? false,
-      ...catalogData,
-      category: { connect: { id: categoryId } },
-      supplier: { connect: { id: supplierResult.supplierId } },
-    },
-    // Preserve admin curation (visible, category, supplier) on re-import.
-    update: catalogData,
-    select: { id: true, createdAt: true, updatedAt: true },
+    select: { id: true, priceOverridden: true },
   });
 
-  const isNew = product.createdAt.getTime() === product.updatedAt.getTime();
-  if (isNew) summary.productsCreated += 1;
-  else summary.productsUpdated += 1;
+  let productId: string;
+  if (existing) {
+    // On re-import, refresh catalog fields but preserve admin curation
+    // (visible, category, supplier). When the price has been manually
+    // overridden, leave basePrice untouched too.
+    const { basePrice, ...rest } = catalogData;
+    const updateData = existing.priceOverridden ? rest : { ...rest, basePrice };
+    const updated = await prisma.product.update({
+      where: { id: existing.id },
+      data: updateData,
+      select: { id: true },
+    });
+    productId = updated.id;
+    summary.productsUpdated += 1;
+  } else {
+    const created = await prisma.product.create({
+      data: {
+        sku: mapped.style,
+        sanmarStyleId: mapped.style,
+        minQuantity: 1,
+        visible: opts.visible ?? false,
+        ...catalogData,
+        category: { connect: { id: categoryId } },
+        supplier: { connect: { id: supplierResult.supplierId } },
+      },
+      select: { id: true },
+    });
+    productId = created.id;
+    summary.productsCreated += 1;
+  }
 
   // Upsert all variants for this style in one transaction.
   const variantUpserts = mapped.variants.map((v) => {
     const { color, size, ...data } = v;
     return prisma.variant.upsert({
-      where: { productId_color_size: { productId: product.id, color, size } },
-      create: { productId: product.id, color, size, ...data },
+      where: { productId_color_size: { productId, color, size } },
+      create: { productId, color, size, ...data },
       update: data,
     });
   });

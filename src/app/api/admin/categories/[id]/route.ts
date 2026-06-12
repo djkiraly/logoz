@@ -57,7 +57,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
     const { id } = await context.params;
     const body = await request.json();
-    const { title, description, imageUrl, featured } = body;
+    const { title, description, imageUrl, featured, markupPercent } = body;
 
     // Check if category exists
     const existingCategory = await prisma.category.findUnique({
@@ -75,6 +75,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       description?: string;
       imageUrl?: string | null;
       featured?: boolean;
+      markupPercent?: number | null;
     } = {};
 
     if (title !== undefined && title.trim()) {
@@ -111,6 +112,11 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
     if (featured !== undefined) {
       updateData.featured = featured;
+    }
+
+    if (markupPercent !== undefined) {
+      updateData.markupPercent =
+        markupPercent === null || markupPercent === '' ? null : Number(markupPercent);
     }
 
     const category = await prisma.category.update({

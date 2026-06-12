@@ -83,6 +83,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       fulfillment,
       visible,
       featured,
+      priceOverridden,
     } = body;
 
     // Check for duplicate SKU if changed
@@ -136,6 +137,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     if (fulfillment !== undefined) updateData.fulfillment = fulfillment;
     if (visible !== undefined) updateData.visible = visible;
     if (featured !== undefined) updateData.featured = featured;
+    if (priceOverridden !== undefined) updateData.priceOverridden = priceOverridden;
 
     const product = await prisma.product.update({
       where: { id },

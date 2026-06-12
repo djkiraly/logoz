@@ -21,6 +21,7 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
+  Calculator,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -59,6 +60,7 @@ type Product = {
   fulfillment: FulfillmentMethod[];
   visible: boolean;
   featured: boolean;
+  priceOverridden: boolean;
   category?: Category;
   supplier?: Supplier | null;
   createdAt: string;
@@ -99,6 +101,7 @@ type ProductFormData = {
   fulfillment: FulfillmentMethod[];
   visible: boolean;
   featured: boolean;
+  priceOverridden: boolean;
 };
 
 const emptyProduct: ProductFormData = {
@@ -115,6 +118,7 @@ const emptyProduct: ProductFormData = {
   fulfillment: [],
   visible: false,
   featured: false,
+  priceOverridden: true,
 };
 
 export default function ProductsPage() {
@@ -143,6 +147,7 @@ export default function ProductsPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [pagination, setPagination] = useState<Pagination>({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
+  const [isRecalculating, setIsRecalculating] = useState(false);
 
   const hasActiveFilters = !!search || !!categoryFilter || !!supplierFilter || visibilityFilter !== 'all';
 
@@ -255,6 +260,7 @@ export default function ProductsPage() {
       fulfillment: product.fulfillment,
       visible: product.visible,
       featured: product.featured,
+      priceOverridden: product.priceOverridden,
     });
     setIsModalOpen(true);
   };
@@ -354,6 +360,30 @@ export default function ProductsPage() {
       ...prev,
       gallery: prev.gallery.filter((_, i) => i !== index),
     }));
+  };
+
+  const handleRecalculatePrices = async () => {
+    if (!window.confirm(
+      'Recalculate public prices from supplier cost using category markup? Products with a locked (manual) price are not changed.'
+    )) {
+      return;
+    }
+    setIsRecalculating(true);
+    setMessage(null);
+    try {
+      const response = await fetch('/api/admin/products/pricing', { method: 'POST' });
+      const data = await response.json();
+      if (data.ok) {
+        setMessage({ type: 'success', text: `Recalculated ${data.data.updated} product price(s).` });
+        fetchProducts();
+      } else {
+        throw new Error(data.error || 'Failed to recalculate prices');
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Failed to recalculate prices' });
+    } finally {
+      setIsRecalculating(false);
+    }
   };
 
   const handleSave = async () => {
@@ -502,6 +532,15 @@ export default function ProductsPage() {
             Manage Categories
           </Link>
           <button
+            onClick={handleRecalculatePrices}
+            disabled={isRecalculating}
+            title="Set public prices = supplier cost × category markup (skips locked prices)"
+            className="flex items-center gap-2 px-4 py-2 text-slate-400 hover:text-white border border-white/10 rounded-lg hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {isRecalculating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calculator className="w-4 h-4" />}
+            Recalculate Prices
+          </button>
+          <button
             onClick={openCreateModal}
             className="flex items-center gap-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
           >
@@ -643,6 +682,7 @@ export default function ProductsPage() {
                     Price <SortIcon field="basePrice" />
                   </button>
                 </th>
+                <th className="text-left p-4 text-sm font-medium text-slate-400">Cost</th>
                 <th className="text-left p-4 text-sm font-medium text-slate-400">
                   <button onClick={() => handleSort('visible')} className="inline-flex items-center gap-1.5 hover:text-white transition-colors">
                     Status <SortIcon field="visible" />
@@ -654,7 +694,7 @@ export default function ProductsPage() {
             <tbody>
               {isLoading && (
                 <tr>
-                  <td colSpan={6} className="p-12 text-center">
+                  <td colSpan={7} className="p-12 text-center">
                     <Loader2 className="w-6 h-6 text-cyan-400 animate-spin inline" />
                   </td>
                 </tr>
@@ -693,6 +733,16 @@ export default function ProductsPage() {
                   </td>
                   <td className="p-4">
                     <span className="text-slate-300">${formatPrice(product.basePrice)}</span>
+                    {product.priceOverridden && (
+                      <span className="ml-2 text-[10px] uppercase tracking-wide text-amber-400/80" title="Manual price — not changed by import or recalculation">
+                        locked
+                      </span>
+                    )}
+                  </td>
+                  <td className="p-4">
+                    <span className="text-slate-500">
+                      {product.cost != null && product.cost !== '' ? `$${formatPrice(product.cost)}` : '—'}
+                    </span>
                   </td>
                   <td className="p-4">
                     <button
@@ -1012,6 +1062,22 @@ export default function ProductsPage() {
                   />
                 </div>
               </div>
+
+              {/* Price lock */}
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.priceOverridden}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, priceOverridden: e.target.checked }))}
+                  className="w-4 h-4 rounded border-white/20 bg-white/5 text-cyan-500 focus:ring-cyan-500/50"
+                />
+                <div>
+                  <span className="text-sm font-medium text-slate-300">Lock price (manual)</span>
+                  <p className="text-xs text-slate-500">
+                    Keep this base price fixed — catalog re-imports and bulk &quot;Recalculate Prices&quot; will not change it.
+                  </p>
+                </div>
+              </label>
 
               {/* Category & Supplier */}
               <div className="grid grid-cols-2 gap-4">

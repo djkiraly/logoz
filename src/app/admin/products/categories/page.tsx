@@ -24,6 +24,7 @@ type Category = {
   description: string;
   imageUrl: string | null;
   featured: boolean;
+  markupPercent: number | null;
   _count: {
     products: number;
   };
@@ -34,6 +35,7 @@ type CategoryFormData = {
   description: string;
   imageUrl: string | null;
   featured: boolean;
+  markupPercent: string;
 };
 
 const emptyCategory: CategoryFormData = {
@@ -41,6 +43,7 @@ const emptyCategory: CategoryFormData = {
   description: '',
   imageUrl: null,
   featured: false,
+  markupPercent: '',
 };
 
 export default function CategoriesPage() {
@@ -55,9 +58,45 @@ export default function CategoriesPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [defaultMarkup, setDefaultMarkup] = useState('');
+  const [isSavingMarkup, setIsSavingMarkup] = useState(false);
+
   useEffect(() => {
     fetchCategories();
+    fetchDefaultMarkup();
   }, []);
+
+  const fetchDefaultMarkup = async () => {
+    try {
+      const response = await fetch('/api/admin/products/pricing');
+      const data = await response.json();
+      if (data.ok) setDefaultMarkup(String(data.data.defaultMarkupPercent ?? 0));
+    } catch (error) {
+      console.error('Failed to fetch default markup:', error);
+    }
+  };
+
+  const saveDefaultMarkup = async () => {
+    setIsSavingMarkup(true);
+    setMessage(null);
+    try {
+      const response = await fetch('/api/admin/products/pricing', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ defaultMarkupPercent: parseFloat(defaultMarkup) || 0 }),
+      });
+      const data = await response.json();
+      if (data.ok) {
+        setMessage({ type: 'success', text: 'Default markup saved.' });
+      } else {
+        throw new Error(data.error || 'Failed to save markup');
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Failed to save markup' });
+    } finally {
+      setIsSavingMarkup(false);
+    }
+  };
 
   const fetchCategories = async () => {
     try {
@@ -87,6 +126,7 @@ export default function CategoriesPage() {
       description: category.description,
       imageUrl: category.imageUrl,
       featured: category.featured,
+      markupPercent: category.markupPercent != null ? String(category.markupPercent) : '',
     });
     setIsModalOpen(true);
   };
@@ -307,6 +347,39 @@ export default function CategoriesPage() {
         </div>
       )}
 
+      {/* Default markup */}
+      <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl p-5">
+        <div className="flex flex-col sm:flex-row sm:items-end gap-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">Default markup %</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={defaultMarkup}
+                onChange={(e) => setDefaultMarkup(e.target.value)}
+                className="w-32 px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                placeholder="0"
+              />
+              <button
+                onClick={saveDefaultMarkup}
+                disabled={isSavingMarkup}
+                className="flex items-center gap-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {isSavingMarkup ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                Save
+              </button>
+            </div>
+          </div>
+          <p className="text-xs text-slate-500 sm:pb-3 max-w-md">
+            Applied as <span className="text-slate-300">price = cost × (1 + markup%)</span> to categories without
+            their own markup. Use <span className="text-slate-300">Recalculate Prices</span> on the Products page to
+            apply it. Locked (manual) product prices are never changed.
+          </p>
+        </div>
+      </div>
+
       {/* Categories List */}
       {categories.length === 0 ? (
         <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl p-12 text-center">
@@ -330,6 +403,7 @@ export default function CategoriesPage() {
                 <th className="text-left p-4 text-sm font-medium text-slate-400">Category</th>
                 <th className="text-left p-4 text-sm font-medium text-slate-400">Slug</th>
                 <th className="text-left p-4 text-sm font-medium text-slate-400">Products</th>
+                <th className="text-left p-4 text-sm font-medium text-slate-400">Markup</th>
                 <th className="text-left p-4 text-sm font-medium text-slate-400">Featured</th>
                 <th className="text-right p-4 text-sm font-medium text-slate-400">Actions</th>
               </tr>
@@ -365,6 +439,13 @@ export default function CategoriesPage() {
                   </td>
                   <td className="p-4">
                     <span className="text-slate-300">{category._count.products}</span>
+                  </td>
+                  <td className="p-4">
+                    {category.markupPercent != null ? (
+                      <span className="text-slate-300">{category.markupPercent}%</span>
+                    ) : (
+                      <span className="text-slate-500 text-sm">Default</span>
+                    )}
                   </td>
                   <td className="p-4">
                     <button
@@ -548,6 +629,26 @@ export default function CategoriesPage() {
                     />
                   </div>
                 </div>
+              </div>
+
+              {/* Markup */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Markup % <span className="text-slate-500 font-normal">(optional)</span>
+                </label>
+                <input
+                  type="number"
+                  name="markupPercent"
+                  min="0"
+                  step="1"
+                  value={formData.markupPercent}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                  placeholder="Leave blank to use the default markup"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  Overrides the store default for products in this category when recalculating prices.
+                </p>
               </div>
 
               {/* Featured */}

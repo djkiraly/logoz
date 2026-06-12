@@ -152,6 +152,7 @@ export async function POST(request: NextRequest) {
       fulfillment,
       visible,
       featured,
+      priceOverridden,
     } = body;
 
     // Validate required fields
@@ -208,6 +209,7 @@ export async function POST(request: NextRequest) {
         fulfillment: fulfillment || [],
         visible: visible ?? false,
         featured: featured ?? false,
+        priceOverridden: priceOverridden ?? false,
       },
       include: {
         category: true,
