@@ -19,9 +19,11 @@ git pull origin main
 echo "[2/5] Installing dependencies..."
 npm ci --production=false
 
-# Run database migrations
-echo "[3/5] Running database migrations..."
-npx prisma migrate deploy
+# Sync the database schema. This project manages its schema with `prisma db
+# push` (there is no prisma/migrations directory), so `migrate deploy` would be
+# a no-op and silently skip schema changes. db push is idempotent.
+echo "[3/5] Syncing database schema..."
+npx prisma db push
 npx prisma generate
 
 # Build
