@@ -90,8 +90,13 @@ list_tables() {
 # ---------------------------------------------------------------------------
 cmd_preflight() {
   echo "[preflight] Checking required tooling..."
-  command -v psql   >/dev/null || die "psql not found. Install postgresql-client first (the 'install' step does this)."
-  command -v pg_dump>/dev/null || echo "  note: pg_dump not yet installed; 'install' step will add it."
+  if ! command -v psql >/dev/null; then
+    echo "[preflight] psql not found; installing base postgresql-client to query Neon..."
+    $SUDO apt-get update
+    $SUDO apt-get install -y postgresql-client
+  fi
+  command -v psql >/dev/null || die "psql still not found after install; check apt output above."
+  command -v pg_dump>/dev/null || echo "  note: pg_dump not yet installed; 'install' step will add the version-matched client."
 
   echo "[preflight] Neon server version:"
   psql_neon -At -c "select version();"
