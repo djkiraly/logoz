@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Plus,
   Loader2,
@@ -15,6 +15,12 @@ import {
   Upload,
   Image as ImageIcon,
   FolderTree,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -57,6 +63,17 @@ type Product = {
   supplier?: Supplier | null;
   createdAt: string;
 };
+
+type Pagination = {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+};
+
+type SortField = 'name' | 'sku' | 'category' | 'basePrice' | 'visible' | 'createdAt';
+
+const PAGE_SIZE_OPTIONS = [25, 50, 100, 500];
 
 const FULFILLMENT_METHODS: { value: FulfillmentMethod; label: string }[] = [
   { value: 'EMBROIDERY', label: 'Embroidery' },
@@ -115,33 +132,105 @@ export default function ProductsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
 
+  // List controls: search / filters / sort / pagination
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [supplierFilter, setSupplierFilter] = useState('');
+  const [visibilityFilter, setVisibilityFilter] = useState<'all' | 'visible' | 'hidden'>('all');
+  const [sortField, setSortField] = useState<SortField>('createdAt');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [pagination, setPagination] = useState<Pagination>({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
+
+  const hasActiveFilters = !!search || !!categoryFilter || !!supplierFilter || visibilityFilter !== 'all';
+
+  // Load the filter dropdown sources once.
   useEffect(() => {
-    fetchData();
+    const fetchFilters = async () => {
+      try {
+        const [categoriesRes, suppliersRes] = await Promise.all([
+          fetch('/api/admin/categories'),
+          fetch('/api/admin/vendors'),
+        ]);
+        const [categoriesData, suppliersData] = await Promise.all([
+          categoriesRes.json(),
+          suppliersRes.json(),
+        ]);
+        if (categoriesData.ok) setCategories(categoriesData.data);
+        if (suppliersData.ok) setSuppliers(suppliersData.data);
+      } catch (error) {
+        console.error('Failed to fetch filters:', error);
+      }
+    };
+    fetchFilters();
   }, []);
 
-  const fetchData = async () => {
+  // Debounce the search box, and reset to page 1 when the query changes.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSearch(searchInput.trim());
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  const fetchProducts = useCallback(async () => {
+    setIsLoading(true);
     try {
-      const [productsRes, categoriesRes, suppliersRes] = await Promise.all([
-        fetch('/api/admin/products'),
-        fetch('/api/admin/categories'),
-        fetch('/api/admin/vendors'),
-      ]);
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: String(pageSize),
+        sort: sortField,
+        order: sortOrder,
+        visibility: visibilityFilter,
+      });
+      if (search) params.set('search', search);
+      if (categoryFilter) params.set('categoryId', categoryFilter);
+      if (supplierFilter) params.set('supplierId', supplierFilter);
 
-      const [productsData, categoriesData, suppliersData] = await Promise.all([
-        productsRes.json(),
-        categoriesRes.json(),
-        suppliersRes.json(),
-      ]);
-
-      if (productsData.ok) setProducts(productsData.data);
-      if (categoriesData.ok) setCategories(categoriesData.data);
-      if (suppliersData.ok) setSuppliers(suppliersData.data);
+      const response = await fetch(`/api/admin/products?${params.toString()}`);
+      const data = await response.json();
+      if (data.ok) {
+        setProducts(data.data);
+        if (data.pagination) {
+          setPagination(data.pagination);
+          // Server clamps page to the valid range; mirror that locally.
+          if (data.pagination.page !== page) setPage(data.pagination.page);
+        }
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Failed to load products' });
+      }
     } catch (error) {
-      console.error('Failed to fetch data:', error);
-      setMessage({ type: 'error', text: 'Failed to load data' });
+      console.error('Failed to fetch products:', error);
+      setMessage({ type: 'error', text: 'Failed to load products' });
     } finally {
       setIsLoading(false);
     }
+  }, [page, pageSize, sortField, sortOrder, visibilityFilter, search, categoryFilter, supplierFilter]);
+
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+    setPage(1);
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return <ArrowUpDown className="w-3.5 h-3.5 text-slate-600" />;
+    return sortOrder === 'asc' ? (
+      <ArrowUp className="w-3.5 h-3.5 text-cyan-400" />
+    ) : (
+      <ArrowDown className="w-3.5 h-3.5 text-cyan-400" />
+    );
   };
 
   const openCreateModal = () => {
@@ -304,7 +393,7 @@ export default function ProductsPage() {
         text: editingProduct ? 'Product updated successfully!' : 'Product created successfully!',
       });
       closeModal();
-      fetchData();
+      fetchProducts();
     } catch (error) {
       setMessage({
         type: 'error',
@@ -328,7 +417,7 @@ export default function ProductsPage() {
 
       setMessage({ type: 'success', text: 'Product deleted successfully!' });
       setDeleteConfirm(null);
-      fetchData();
+      fetchProducts();
     } catch (error) {
       setMessage({
         type: 'error',
@@ -353,7 +442,7 @@ export default function ProductsPage() {
         type: 'success',
         text: product.visible ? 'Product hidden from storefront' : 'Product now visible on storefront',
       });
-      fetchData();
+      fetchProducts();
     } catch (error) {
       setMessage({
         type: 'error',
@@ -391,13 +480,8 @@ export default function ProductsPage() {
     return isNaN(num) ? '0.00' : num.toFixed(2);
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
-      </div>
-    );
-  }
+  const rangeStart = pagination.total === 0 ? 0 : (pagination.page - 1) * pagination.pageSize + 1;
+  const rangeEnd = Math.min(pagination.page * pagination.pageSize, pagination.total);
 
   return (
     <div className="space-y-6">
@@ -445,33 +529,137 @@ export default function ProductsPage() {
         </div>
       )}
 
+      {/* Toolbar: search / filters / page size */}
+      <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+          <input
+            type="text"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Search name, SKU, or description..."
+            className="w-full pl-10 pr-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+          />
+        </div>
+
+        <select
+          value={categoryFilter}
+          onChange={(e) => { setCategoryFilter(e.target.value); setPage(1); }}
+          className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+        >
+          <option value="" className="bg-slate-800">All categories</option>
+          {categories.map((cat) => (
+            <option key={cat.id} value={cat.id} className="bg-slate-800">{cat.title}</option>
+          ))}
+        </select>
+
+        <select
+          value={supplierFilter}
+          onChange={(e) => { setSupplierFilter(e.target.value); setPage(1); }}
+          className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+        >
+          <option value="" className="bg-slate-800">All suppliers</option>
+          {suppliers.map((sup) => (
+            <option key={sup.id} value={sup.id} className="bg-slate-800">{sup.name}</option>
+          ))}
+        </select>
+
+        <select
+          value={visibilityFilter}
+          onChange={(e) => { setVisibilityFilter(e.target.value as typeof visibilityFilter); setPage(1); }}
+          className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+        >
+          <option value="all" className="bg-slate-800">All statuses</option>
+          <option value="visible" className="bg-slate-800">Visible</option>
+          <option value="hidden" className="bg-slate-800">Hidden</option>
+        </select>
+
+        <select
+          value={pageSize}
+          onChange={(e) => { setPageSize(parseInt(e.target.value, 10)); setPage(1); }}
+          className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+          title="Rows per page"
+        >
+          {PAGE_SIZE_OPTIONS.map((size) => (
+            <option key={size} value={size} className="bg-slate-800">{size} / page</option>
+          ))}
+        </select>
+      </div>
+
       {/* Products List */}
-      {products.length === 0 ? (
+      {!isLoading && products.length === 0 ? (
         <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl p-12 text-center">
-          <p className="text-slate-400 mb-4">No products yet. Add your first product to get started.</p>
-          <button
-            onClick={openCreateModal}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Add Product
-          </button>
+          {hasActiveFilters ? (
+            <>
+              <p className="text-slate-400 mb-4">No products match your filters.</p>
+              <button
+                onClick={() => {
+                  setSearchInput('');
+                  setCategoryFilter('');
+                  setSupplierFilter('');
+                  setVisibilityFilter('all');
+                  setPage(1);
+                }}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors"
+              >
+                Clear filters
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-slate-400 mb-4">No products yet. Add your first product to get started.</p>
+              <button
+                onClick={openCreateModal}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Add Product
+              </button>
+            </>
+          )}
         </div>
       ) : (
         <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden">
           <table className="w-full">
             <thead>
               <tr className="border-b border-white/10">
-                <th className="text-left p-4 text-sm font-medium text-slate-400">Product</th>
-                <th className="text-left p-4 text-sm font-medium text-slate-400">SKU</th>
-                <th className="text-left p-4 text-sm font-medium text-slate-400">Category</th>
-                <th className="text-left p-4 text-sm font-medium text-slate-400">Price</th>
-                <th className="text-left p-4 text-sm font-medium text-slate-400">Status</th>
+                <th className="text-left p-4 text-sm font-medium text-slate-400">
+                  <button onClick={() => handleSort('name')} className="inline-flex items-center gap-1.5 hover:text-white transition-colors">
+                    Product <SortIcon field="name" />
+                  </button>
+                </th>
+                <th className="text-left p-4 text-sm font-medium text-slate-400">
+                  <button onClick={() => handleSort('sku')} className="inline-flex items-center gap-1.5 hover:text-white transition-colors">
+                    SKU <SortIcon field="sku" />
+                  </button>
+                </th>
+                <th className="text-left p-4 text-sm font-medium text-slate-400">
+                  <button onClick={() => handleSort('category')} className="inline-flex items-center gap-1.5 hover:text-white transition-colors">
+                    Category <SortIcon field="category" />
+                  </button>
+                </th>
+                <th className="text-left p-4 text-sm font-medium text-slate-400">
+                  <button onClick={() => handleSort('basePrice')} className="inline-flex items-center gap-1.5 hover:text-white transition-colors">
+                    Price <SortIcon field="basePrice" />
+                  </button>
+                </th>
+                <th className="text-left p-4 text-sm font-medium text-slate-400">
+                  <button onClick={() => handleSort('visible')} className="inline-flex items-center gap-1.5 hover:text-white transition-colors">
+                    Status <SortIcon field="visible" />
+                  </button>
+                </th>
                 <th className="text-right p-4 text-sm font-medium text-slate-400">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {products.map((product) => (
+              {isLoading && (
+                <tr>
+                  <td colSpan={6} className="p-12 text-center">
+                    <Loader2 className="w-6 h-6 text-cyan-400 animate-spin inline" />
+                  </td>
+                </tr>
+              )}
+              {!isLoading && products.map((product) => (
                 <tr key={product.id} className="border-b border-white/5 hover:bg-white/5">
                   <td className="p-4">
                     <div className="flex items-center gap-3">
@@ -567,6 +755,36 @@ export default function ProductsPage() {
               ))}
             </tbody>
           </table>
+
+          {/* Pagination footer */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 border-t border-white/10">
+            <p className="text-sm text-slate-400">
+              {pagination.total === 0
+                ? 'No products'
+                : `Showing ${rangeStart}–${rangeEnd} of ${pagination.total}`}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={pagination.page <= 1 || isLoading}
+                className="flex items-center gap-1 px-3 py-1.5 text-sm bg-white/5 border border-white/10 rounded-lg text-slate-300 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Prev
+              </button>
+              <span className="text-sm text-slate-400 px-2">
+                Page {pagination.page} of {pagination.totalPages}
+              </span>
+              <button
+                onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
+                disabled={pagination.page >= pagination.totalPages || isLoading}
+                className="flex items-center gap-1 px-3 py-1.5 text-sm bg-white/5 border border-white/10 rounded-lg text-slate-300 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                Next
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

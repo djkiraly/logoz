@@ -5,8 +5,49 @@ import { adminLogger } from '@/lib/logger';
 import { Prisma } from '@prisma/client';
 import { trackEntityActivity } from '@/lib/analytics';
 
-// GET /api/admin/products - List all products
-export async function GET() {
+// Allowed page sizes for the admin product list.
+const ALLOWED_PAGE_SIZES = [25, 50, 100, 500];
+
+// Whitelist of sortable fields -> Prisma orderBy (prevents arbitrary sort input).
+function buildOrderBy(
+  field: string | null,
+  order: Prisma.SortOrder
+): Prisma.ProductOrderByWithRelationInput {
+  switch (field) {
+    case 'name':
+      return { name: order };
+    case 'sku':
+      return { sku: order };
+    case 'basePrice':
+      return { basePrice: order };
+    case 'visible':
+      return { visible: order };
+    case 'featured':
+      return { featured: order };
+    case 'category':
+      return { category: { title: order } };
+    case 'updatedAt':
+      return { updatedAt: order };
+    case 'createdAt':
+    default:
+      return { createdAt: order };
+  }
+}
+
+// GET /api/admin/products - List products with optional search/filter/sort/paging.
+//
+// Query params (all optional):
+//   search      - case-insensitive match on name / sku / description
+//   categoryId  - filter by category
+//   supplierId  - filter by supplier
+//   visibility  - all | visible | hidden
+//   sort        - name | sku | basePrice | category | visible | featured | createdAt | updatedAt
+//   order       - asc | desc (default desc)
+//   page        - 1-based page number (default 1)
+//   pageSize    - 25 | 50 | 100 | 500; pagination only applies when this is a
+//                 valid value, so callers that omit it (e.g. the quote builder)
+//                 still receive the full list.
+export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser();
     if (!user) {
@@ -17,15 +58,61 @@ export async function GET() {
       return NextResponse.json({ error: 'Database not configured' }, { status: 500 });
     }
 
+    const { searchParams } = new URL(request.url);
+
+    // ----- Filtering -----
+    const search = (searchParams.get('search') || '').trim();
+    const categoryId = searchParams.get('categoryId') || undefined;
+    const supplierId = searchParams.get('supplierId') || undefined;
+    const visibility = searchParams.get('visibility') || 'all';
+
+    const where: Prisma.ProductWhereInput = {};
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { sku: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+    if (categoryId) where.categoryId = categoryId;
+    if (supplierId) where.supplierId = supplierId;
+    if (visibility === 'visible') where.visible = true;
+    else if (visibility === 'hidden') where.visible = false;
+
+    // ----- Sorting -----
+    const order: Prisma.SortOrder = searchParams.get('order') === 'asc' ? 'asc' : 'desc';
+    const orderBy = buildOrderBy(searchParams.get('sort'), order);
+
+    // ----- Pagination (opt-in via a valid pageSize) -----
+    const pageSizeRaw = parseInt(searchParams.get('pageSize') || '', 10);
+    const paginate = ALLOWED_PAGE_SIZES.includes(pageSizeRaw);
+    const pageSize = paginate ? pageSizeRaw : 0;
+
+    const total = await prisma.product.count({ where });
+
+    let page = 1;
+    if (paginate) {
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      page = Math.min(Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1), totalPages);
+    }
+
     const products = await prisma.product.findMany({
-      include: {
-        category: true,
-        supplier: true,
-      },
-      orderBy: { createdAt: 'desc' },
+      where,
+      include: { category: true, supplier: true },
+      orderBy,
+      ...(paginate ? { skip: (page - 1) * pageSize, take: pageSize } : {}),
     });
 
-    return NextResponse.json({ ok: true, data: products });
+    return NextResponse.json({
+      ok: true,
+      data: products,
+      pagination: {
+        page,
+        pageSize: paginate ? pageSize : total,
+        total,
+        totalPages: paginate ? Math.max(1, Math.ceil(total / pageSize)) : 1,
+      },
+    });
   } catch (error) {
     adminLogger.error('Failed to fetch products', {
       error: error instanceof Error ? error.message : String(error),
