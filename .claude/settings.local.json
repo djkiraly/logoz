@@ -74,7 +74,12 @@
       "Bash(npm audit:*)",
       "Bash(npm prune:*)",
       "Bash(npm uninstall:*)",
-      "Bash(npm test:*)"
+      "Bash(npm test:*)",
+      "Bash(echo \"version: $\\(node -p \"require\\('./package.json'\\).version\"\\)\")",
+      "Bash(echo \"---tsc exit $?---\")",
+      "Bash(npx eslint *)",
+      "Bash(echo \"---eslint exit $?---\")",
+      "Bash(git merge *)"
     ],
     "deny": [],
     "ask": []
