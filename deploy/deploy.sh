@@ -17,6 +17,11 @@ PM2_APP="${PM2_APP:-logoz}"
 NGINX_SITE="${NGINX_SITE:-/etc/nginx/sites-available/logoz}"
 cd "$APP_DIR"
 
+# Resolve the app's listen port from .env (multiple sites share this host, so it
+# may not be the default 3000). Used to keep the nginx upstream in sync.
+APP_PORT="$(grep -E '^\s*PORT\s*=' .env 2>/dev/null | tail -n1 | sed -E 's/^\s*PORT\s*=\s*"?([0-9]+)"?.*/\1/')"
+APP_PORT="${APP_PORT:-3000}"
+
 # Use sudo for privileged commands only when not already root.
 SUDO=""
 if [ "$(id -u)" -ne 0 ]; then
@@ -66,6 +71,13 @@ pm2 save
 echo "[6/6] Validating nginx configuration and TLS certificates..."
 
 if [ -f "$NGINX_SITE" ]; then
+  # Keep the nginx upstream port in sync with the app's PORT (.env). The only
+  # 127.0.0.1:<port> reference in the config is the upstream backend.
+  if ! grep -q "server 127.0.0.1:${APP_PORT};" "$NGINX_SITE"; then
+    echo "  Updating nginx upstream to 127.0.0.1:${APP_PORT}"
+    $SUDO sed -i -E "s|server 127\.0\.0\.1:[0-9]+;|server 127.0.0.1:${APP_PORT};|" "$NGINX_SITE"
+  fi
+
   cert_missing=0
   # Extract every ssl_certificate / ssl_certificate_key path (ignores comments).
   while IFS= read -r cert; do
