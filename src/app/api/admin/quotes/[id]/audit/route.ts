@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { getQuoteAuditLogs } from '@/lib/quote-audit';
+import { prisma, isDatabaseEnabled } from '@/lib/prisma';
 import { adminLogger } from '@/lib/logger';
 
 type RouteParams = {
@@ -16,6 +17,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     const { id } = await params;
+
+    // Confirm the quote exists before exposing its audit trail (and so a
+    // missing/invalid id returns 404 rather than an empty success).
+    if (isDatabaseEnabled) {
+      const quote = await prisma.quote.findUnique({ where: { id }, select: { id: true } });
+      if (!quote) {
+        return NextResponse.json({ error: 'Quote not found' }, { status: 404 });
+      }
+    }
 
     const logs = await getQuoteAuditLogs(id);
 

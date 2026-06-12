@@ -1,6 +1,7 @@
 import { prisma, isDatabaseEnabled } from './prisma';
 import { sendEmail } from './gmail';
 import { adminLogger } from './logger';
+import { escapeHtml, escapeHtmlMultiline } from './validation';
 
 // Define types locally to avoid Prisma client dependency issues during build
 type NotificationType =
@@ -188,42 +189,42 @@ const DEFAULT_TEMPLATES: Record<NotificationType, { subject: string; body: strin
 function processTemplate(template: string, context: NotificationContext): string {
   let result = template;
 
-  // Quote placeholders
+  // Quote placeholders (user-controlled values are HTML-escaped to prevent XSS)
   if (context.quote) {
-    result = result.replace(/\{\{quoteNumber\}\}/g, context.quote.quoteNumber || '');
+    result = result.replace(/\{\{quoteNumber\}\}/g, escapeHtml(context.quote.quoteNumber || ''));
     result = result.replace(/\{\{quoteTotal\}\}/g, formatCurrency(context.quote.total));
-    result = result.replace(/\{\{quoteTitle\}\}/g, context.quote.title || 'N/A');
-    result = result.replace(/\{\{quoteStatus\}\}/g, context.quote.status || '');
+    result = result.replace(/\{\{quoteTitle\}\}/g, escapeHtml(context.quote.title || 'N/A'));
+    result = result.replace(/\{\{quoteStatus\}\}/g, escapeHtml(context.quote.status || ''));
     result = result.replace(/\{\{validUntil\}\}/g, context.quote.validUntil ? new Date(context.quote.validUntil).toLocaleDateString('en-US') : 'N/A');
-    result = result.replace(/\{\{customerName\}\}/g, context.quote.customerName || context.customer?.contactName || 'Valued Customer');
-    result = result.replace(/\{\{customerCompany\}\}/g, context.quote.customerCompany || context.customer?.companyName || 'N/A');
-    result = result.replace(/\{\{customerEmail\}\}/g, context.quote.customerEmail || context.customer?.email || '');
+    result = result.replace(/\{\{customerName\}\}/g, escapeHtml(context.quote.customerName || context.customer?.contactName || 'Valued Customer'));
+    result = result.replace(/\{\{customerCompany\}\}/g, escapeHtml(context.quote.customerCompany || context.customer?.companyName || 'N/A'));
+    result = result.replace(/\{\{customerEmail\}\}/g, escapeHtml(context.quote.customerEmail || context.customer?.email || ''));
   }
 
   // Customer placeholders
   if (context.customer) {
-    result = result.replace(/\{\{customerName\}\}/g, context.customer.contactName || '');
-    result = result.replace(/\{\{customerEmail\}\}/g, context.customer.email || '');
-    result = result.replace(/\{\{customerCompany\}\}/g, context.customer.companyName || '');
+    result = result.replace(/\{\{customerName\}\}/g, escapeHtml(context.customer.contactName || ''));
+    result = result.replace(/\{\{customerEmail\}\}/g, escapeHtml(context.customer.email || ''));
+    result = result.replace(/\{\{customerCompany\}\}/g, escapeHtml(context.customer.companyName || ''));
   }
 
   // User placeholders
   if (context.user) {
-    result = result.replace(/\{\{userName\}\}/g, context.user.name || '');
-    result = result.replace(/\{\{userEmail\}\}/g, context.user.email || '');
+    result = result.replace(/\{\{userName\}\}/g, escapeHtml(context.user.name || ''));
+    result = result.replace(/\{\{userEmail\}\}/g, escapeHtml(context.user.email || ''));
   }
 
   // Status change placeholders
-  result = result.replace(/\{\{previousStatus\}\}/g, context.previousStatus || '');
-  result = result.replace(/\{\{newStatus\}\}/g, context.newStatus || '');
+  result = result.replace(/\{\{previousStatus\}\}/g, escapeHtml(context.previousStatus || ''));
+  result = result.replace(/\{\{newStatus\}\}/g, escapeHtml(context.newStatus || ''));
 
-  // Artwork placeholders
+  // Artwork placeholders (URLs are system-generated; notes/filenames are escaped)
   if (context.artwork) {
     result = result.replace(/\{\{artworkUrl\}\}/g, context.artwork.url || '');
-    result = result.replace(/\{\{artworkFileName\}\}/g, context.artwork.fileName || '');
+    result = result.replace(/\{\{artworkFileName\}\}/g, escapeHtml(context.artwork.fileName || ''));
     result = result.replace(/\{\{artworkVersion\}\}/g, String(context.artwork.version || 1));
     result = result.replace(/\{\{artworkApprovalUrl\}\}/g, context.artwork.approvalUrl || '');
-    result = result.replace(/\{\{artworkNotes\}\}/g, context.artwork.notes || 'No notes provided');
+    result = result.replace(/\{\{artworkNotes\}\}/g, escapeHtmlMultiline(context.artwork.notes || 'No notes provided'));
     result = result.replace(/\{\{artworkAction\}\}/g, context.artwork.action === 'approved' ? 'Approved' : 'Declined');
   }
 
@@ -438,7 +439,7 @@ export async function notifyQuoteOwnerStatusChange(
       </div>
 
       <div style="background: #ffffff; padding: 32px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
-        <p style="margin: 0 0 20px 0; color: #1e293b; font-size: 16px;">Hi ${owner.name},</p>
+        <p style="margin: 0 0 20px 0; color: #1e293b; font-size: 16px;">Hi ${escapeHtml(owner.name)},</p>
 
         <p style="margin: 0 0 24px 0; color: #475569; font-size: 15px; line-height: 1.6;">
           ${isApproved
@@ -454,17 +455,17 @@ export async function notifyQuoteOwnerStatusChange(
           <table style="width: 100%; font-size: 14px;">
             <tr>
               <td style="padding: 6px 0; color: #64748b;">Quote Number:</td>
-              <td style="padding: 6px 0; color: #1e293b; font-weight: 500;">${quote?.quoteNumber}</td>
+              <td style="padding: 6px 0; color: #1e293b; font-weight: 500;">${escapeHtml(quote?.quoteNumber)}</td>
             </tr>
             ${quote?.title ? `
             <tr>
               <td style="padding: 6px 0; color: #64748b;">Title:</td>
-              <td style="padding: 6px 0; color: #1e293b; font-weight: 500;">${quote.title}</td>
+              <td style="padding: 6px 0; color: #1e293b; font-weight: 500;">${escapeHtml(quote.title)}</td>
             </tr>
             ` : ''}
             <tr>
               <td style="padding: 6px 0; color: #64748b;">Customer:</td>
-              <td style="padding: 6px 0; color: #1e293b; font-weight: 500;">${quote?.customerName || 'N/A'}${quote?.customerCompany ? ` (${quote.customerCompany})` : ''}</td>
+              <td style="padding: 6px 0; color: #1e293b; font-weight: 500;">${escapeHtml(quote?.customerName || 'N/A')}${quote?.customerCompany ? ` (${escapeHtml(quote.customerCompany)})` : ''}</td>
             </tr>
             <tr>
               <td style="padding: 6px 0; color: #64748b;">Total:</td>
@@ -608,7 +609,7 @@ export async function notifyArtworkResponse(
         </div>
 
         <div style="background: #ffffff; padding: 32px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
-          <p style="margin: 0 0 20px 0; color: #1e293b; font-size: 16px;">Hi ${owner.name},</p>
+          <p style="margin: 0 0 20px 0; color: #1e293b; font-size: 16px;">Hi ${escapeHtml(owner.name)},</p>
 
           <p style="margin: 0 0 24px 0; color: #475569; font-size: 15px; line-height: 1.6;">
             ${isApproved
@@ -624,22 +625,22 @@ export async function notifyArtworkResponse(
             <table style="width: 100%; font-size: 14px;">
               <tr>
                 <td style="padding: 6px 0; color: #64748b;">Quote Number:</td>
-                <td style="padding: 6px 0; color: #1e293b; font-weight: 500;">${quote?.quoteNumber}</td>
+                <td style="padding: 6px 0; color: #1e293b; font-weight: 500;">${escapeHtml(quote?.quoteNumber)}</td>
               </tr>
               ${quote?.title ? `
               <tr>
                 <td style="padding: 6px 0; color: #64748b;">Title:</td>
-                <td style="padding: 6px 0; color: #1e293b; font-weight: 500;">${quote.title}</td>
+                <td style="padding: 6px 0; color: #1e293b; font-weight: 500;">${escapeHtml(quote.title)}</td>
               </tr>
               ` : ''}
               <tr>
                 <td style="padding: 6px 0; color: #64748b;">Customer:</td>
-                <td style="padding: 6px 0; color: #1e293b; font-weight: 500;">${quote?.customerName || 'N/A'}</td>
+                <td style="padding: 6px 0; color: #1e293b; font-weight: 500;">${escapeHtml(quote?.customerName || 'N/A')}</td>
               </tr>
               ${artwork?.notes ? `
               <tr>
                 <td style="padding: 6px 0; color: #64748b; vertical-align: top;">Customer Notes:</td>
-                <td style="padding: 6px 0; color: #1e293b;">${artwork.notes}</td>
+                <td style="padding: 6px 0; color: #1e293b;">${escapeHtmlMultiline(artwork.notes)}</td>
               </tr>
               ` : ''}
             </table>

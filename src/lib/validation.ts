@@ -130,6 +130,43 @@ export function sanitizeInput(input: string): string {
 }
 
 /**
+ * Escape HTML special characters to prevent XSS when interpolating
+ * untrusted text (admin notes/titles, customer names/companies, line-item
+ * names) into HTML templates such as emails and printable documents.
+ */
+export function escapeHtml(input: unknown): string {
+  if (input === null || input === undefined) return '';
+  return String(input)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Escape HTML and convert newlines to <br> for multi-line free-text fields
+ * (e.g. notes) rendered inside HTML.
+ */
+export function escapeHtmlMultiline(input: unknown): string {
+  return escapeHtml(input).replace(/\r?\n/g, '<br>');
+}
+
+/**
+ * Escape a value for safe inclusion inside an XML/SOAP document. Prevents
+ * breaking out of an element or injecting markup via credentials/params.
+ */
+export function escapeXml(input: unknown): string {
+  if (input === null || input === undefined) return '';
+  return String(input)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+/**
  * Validate that an email domain exists (basic check)
  * This is a quick validation - for production, consider DNS validation
  */

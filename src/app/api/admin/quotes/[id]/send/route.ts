@@ -5,6 +5,8 @@ import { adminLogger } from '@/lib/logger';
 import { sendEmail } from '@/lib/gmail';
 import { trackEntityActivity, trackQuoteFunnelEvent } from '@/lib/analytics';
 import { logQuoteSent } from '@/lib/quote-audit';
+import { requireRole } from '@/lib/auth';
+import { escapeHtml, escapeHtmlMultiline } from '@/lib/validation';
 import crypto from 'crypto';
 
 type RouteParams = {
@@ -67,16 +69,19 @@ function generateQuoteEmailHtml(
   contactEmail: string,
   contactPhone: string
 ): string {
-  const customerName = quote.customer?.contactName || quote.customerName || 'Valued Customer';
-  const companyName = quote.customer?.companyName || quote.customerCompany || '';
+  const customerName = escapeHtml(quote.customer?.contactName || quote.customerName || 'Valued Customer');
+  const companyName = escapeHtml(quote.customer?.companyName || quote.customerCompany || '');
+  const quoteNumber = escapeHtml(quote.quoteNumber);
+  const quoteTitle = quote.title ? escapeHtml(quote.title) : '';
+  const safeSiteName = escapeHtml(siteName);
 
   const lineItemsHtml = quote.lineItems
     .map(
       (item) => `
       <tr>
         <td style="padding: 12px; border-bottom: 1px solid #e2e8f0;">
-          <strong style="color: #1e293b;">${item.name}</strong>
-          ${item.description ? `<br><span style="color: #64748b; font-size: 13px;">${item.description}</span>` : ''}
+          <strong style="color: #1e293b;">${escapeHtml(item.name)}</strong>
+          ${item.description ? `<br><span style="color: #64748b; font-size: 13px;">${escapeHtml(item.description)}</span>` : ''}
         </td>
         <td style="padding: 12px; border-bottom: 1px solid #e2e8f0; text-align: center; color: #475569;">${item.quantity}</td>
         <td style="padding: 12px; border-bottom: 1px solid #e2e8f0; text-align: right; color: #475569;">${formatCurrency(item.unitPrice.toString())}</td>
@@ -92,7 +97,7 @@ function generateQuoteEmailHtml(
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Quote ${quote.quoteNumber} from ${siteName}</title>
+  <title>Quote ${quoteNumber} from ${safeSiteName}</title>
 </head>
 <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f8fafc;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; padding: 40px 20px;">
@@ -103,8 +108,8 @@ function generateQuoteEmailHtml(
           <!-- Header -->
           <tr>
             <td style="background: linear-gradient(135deg, #0891b2 0%, #0e7490 100%); padding: 32px 40px;">
-              <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">${siteName}</h1>
-              <p style="margin: 8px 0 0 0; color: rgba(255,255,255,0.9); font-size: 14px;">Quote ${quote.quoteNumber}</p>
+              <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">${safeSiteName}</h1>
+              <p style="margin: 8px 0 0 0; color: rgba(255,255,255,0.9); font-size: 14px;">Quote ${quoteNumber}</p>
             </td>
           </tr>
 
@@ -113,7 +118,7 @@ function generateQuoteEmailHtml(
             <td style="padding: 32px 40px 24px 40px;">
               <h2 style="margin: 0 0 16px 0; color: #1e293b; font-size: 20px;">Hello ${customerName},</h2>
               <p style="margin: 0; color: #475569; font-size: 15px; line-height: 1.6;">
-                Thank you for your interest! Please find your customized quote below${quote.title ? ` for <strong>${quote.title}</strong>` : ''}.
+                Thank you for your interest! Please find your customized quote below${quoteTitle ? ` for <strong>${quoteTitle}</strong>` : ''}.
               </p>
               ${companyName ? `<p style="margin: 8px 0 0 0; color: #64748b; font-size: 14px;">Company: ${companyName}</p>` : ''}
             </td>
@@ -131,7 +136,7 @@ function generateQuoteEmailHtml(
                         <td style="color: #64748b; font-size: 13px; padding-bottom: 4px; text-align: right;">Valid Until</td>
                       </tr>
                       <tr>
-                        <td style="color: #0891b2; font-size: 16px; font-weight: 600;">${quote.quoteNumber}</td>
+                        <td style="color: #0891b2; font-size: 16px; font-weight: 600;">${quoteNumber}</td>
                         <td style="color: #1e293b; font-size: 16px; font-weight: 500; text-align: right;">${formatDate(quote.validUntil)}</td>
                       </tr>
                       ${quote.requestedDelivery ? `
@@ -218,7 +223,7 @@ function generateQuoteEmailHtml(
             <td style="padding: 0 40px 32px 40px;">
               <div style="background-color: #fefce8; border: 1px solid #fef08a; border-radius: 8px; padding: 16px;">
                 <p style="margin: 0 0 4px 0; color: #854d0e; font-size: 13px; font-weight: 600;">Notes</p>
-                <p style="margin: 0; color: #713f12; font-size: 14px; line-height: 1.5;">${quote.notes}</p>
+                <p style="margin: 0; color: #713f12; font-size: 14px; line-height: 1.5;">${escapeHtmlMultiline(quote.notes)}</p>
               </div>
             </td>
           </tr>
@@ -247,10 +252,10 @@ function generateQuoteEmailHtml(
           <!-- Footer -->
           <tr>
             <td style="background-color: #f8fafc; padding: 24px 40px; border-top: 1px solid #e2e8f0;">
-              <p style="margin: 0 0 8px 0; color: #1e293b; font-size: 14px; font-weight: 600;">${siteName}</p>
+              <p style="margin: 0 0 8px 0; color: #1e293b; font-size: 14px; font-weight: 600;">${safeSiteName}</p>
               <p style="margin: 0; color: #64748b; font-size: 13px; line-height: 1.5;">
-                ${contactEmail ? `Email: ${contactEmail}<br>` : ''}
-                ${contactPhone ? `Phone: ${contactPhone}` : ''}
+                ${contactEmail ? `Email: ${escapeHtml(contactEmail)}<br>` : ''}
+                ${contactPhone ? `Phone: ${escapeHtml(contactPhone)}` : ''}
               </p>
               <p style="margin: 16px 0 0 0; color: #94a3b8; font-size: 12px;">
                 This quote is valid until ${formatDate(quote.validUntil)}. Prices are subject to change after this date.
@@ -273,6 +278,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (!requireRole(user, 'ADMIN')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     if (!isDatabaseEnabled) {

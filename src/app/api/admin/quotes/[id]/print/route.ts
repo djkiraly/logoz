@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { prisma, isDatabaseEnabled } from '@/lib/prisma';
 import { adminLogger } from '@/lib/logger';
+import { escapeHtml, escapeHtmlMultiline } from '@/lib/validation';
 
 type RouteParams = {
   params: Promise<{ id: string }>;
@@ -63,18 +64,24 @@ function generatePrintableQuoteHtml(
   contactPhone: string,
   address: string
 ): string {
-  const customerName = quote.customer?.contactName || quote.customerName || 'N/A';
-  const companyName = quote.customer?.companyName || quote.customerCompany || '';
-  const customerEmail = quote.customer?.email || quote.customerEmail || '';
-  const customerPhone = quote.customer?.phone || quote.customerPhone || '';
+  const customerName = escapeHtml(quote.customer?.contactName || quote.customerName || 'N/A');
+  const companyName = escapeHtml(quote.customer?.companyName || quote.customerCompany || '');
+  const customerEmail = escapeHtml(quote.customer?.email || quote.customerEmail || '');
+  const customerPhone = escapeHtml(quote.customer?.phone || quote.customerPhone || '');
+  const quoteNumber = escapeHtml(quote.quoteNumber);
+  const quoteTitle = quote.title ? escapeHtml(quote.title) : '';
+  const safeSiteName = escapeHtml(siteName);
+  const safeAddress = escapeHtml(address);
+  const safeContactEmail = escapeHtml(contactEmail);
+  const safeContactPhone = escapeHtml(contactPhone);
 
   const lineItemsHtml = quote.lineItems
     .map(
       (item) => `
       <tr>
         <td style="padding: 12px; border-bottom: 1px solid #e2e8f0;">
-          <strong style="color: #1e293b;">${item.name}</strong>
-          ${item.description ? `<br><span style="color: #64748b; font-size: 13px;">${item.description}</span>` : ''}
+          <strong style="color: #1e293b;">${escapeHtml(item.name)}</strong>
+          ${item.description ? `<br><span style="color: #64748b; font-size: 13px;">${escapeHtml(item.description)}</span>` : ''}
         </td>
         <td style="padding: 12px; border-bottom: 1px solid #e2e8f0; text-align: center; color: #475569;">${item.quantity}</td>
         <td style="padding: 12px; border-bottom: 1px solid #e2e8f0; text-align: right; color: #475569;">${formatCurrency(item.unitPrice.toString())}</td>
@@ -90,7 +97,7 @@ function generatePrintableQuoteHtml(
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Quote ${quote.quoteNumber} - ${siteName}</title>
+  <title>Quote ${quoteNumber} - ${safeSiteName}</title>
   <style>
     @media print {
       body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
@@ -123,16 +130,16 @@ function generatePrintableQuoteHtml(
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td>
-                    <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700;">${siteName}</h1>
+                    <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700;">${safeSiteName}</h1>
                     <p style="margin: 8px 0 0 0; color: rgba(255,255,255,0.9); font-size: 14px;">
-                      ${address ? `${address}<br>` : ''}
-                      ${contactPhone ? `${contactPhone} • ` : ''}${contactEmail}
+                      ${safeAddress ? `${safeAddress}<br>` : ''}
+                      ${safeContactPhone ? `${safeContactPhone} • ` : ''}${safeContactEmail}
                     </p>
                   </td>
                   <td style="text-align: right;">
                     <div style="background: rgba(255,255,255,0.2); border-radius: 8px; padding: 16px 24px; display: inline-block;">
                       <p style="margin: 0; color: rgba(255,255,255,0.8); font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Quote</p>
-                      <p style="margin: 4px 0 0 0; color: #ffffff; font-size: 20px; font-weight: 700;">${quote.quoteNumber}</p>
+                      <p style="margin: 4px 0 0 0; color: #ffffff; font-size: 20px; font-weight: 700;">${quoteNumber}</p>
                     </div>
                   </td>
                 </tr>
@@ -175,12 +182,12 @@ function generatePrintableQuoteHtml(
             </td>
           </tr>
 
-          ${quote.title ? `
+          ${quoteTitle ? `
           <!-- Quote Title -->
           <tr>
             <td style="padding: 0 40px 24px 40px;">
               <div style="background-color: #f0f9ff; border-left: 4px solid #0891b2; padding: 12px 16px; border-radius: 0 8px 8px 0;">
-                <p style="margin: 0; color: #0e7490; font-size: 15px; font-weight: 600;">${quote.title}</p>
+                <p style="margin: 0; color: #0e7490; font-size: 15px; font-weight: 600;">${quoteTitle}</p>
               </div>
             </td>
           </tr>
@@ -255,7 +262,7 @@ function generatePrintableQuoteHtml(
             <td style="padding: 0 40px 32px 40px;">
               <div style="background-color: #fefce8; border: 1px solid #fef08a; border-radius: 8px; padding: 16px;">
                 <p style="margin: 0 0 8px 0; color: #854d0e; font-size: 13px; font-weight: 600;">Notes</p>
-                <p style="margin: 0; color: #713f12; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${quote.notes}</p>
+                <p style="margin: 0; color: #713f12; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${escapeHtmlMultiline(quote.notes)}</p>
               </div>
             </td>
           </tr>

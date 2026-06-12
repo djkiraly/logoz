@@ -14,10 +14,17 @@ import {
   getCacheHeaders,
 } from '@/lib/api-utils';
 import { createRequestLogger } from '@/lib/logger';
+import { getCurrentUser } from '@/lib/auth';
 
 export async function GET(request: Request) {
   try {
     validateRequest(request, { allowedMethods: ['GET'] });
+
+    // Lead requests contain customer PII — require an authenticated admin.
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     if (!isDatabaseEnabled) {
       return NextResponse.json({ data: [] });
