@@ -82,6 +82,52 @@ function parseInteger(value: string | undefined): number | null {
   return n == null ? null : Math.round(n);
 }
 
+/**
+ * Split one delimited line into fields. SanMar ships the catalog as either
+ * tab-delimited (.txt) or comma-delimited (.csv) with identical columns. Quotes
+ * are handled per RFC-4180 (a quoted field may contain the delimiter; `""` is an
+ * escaped quote) so a comma inside a quoted field doesn't shift columns. Lines
+ * with no quote character take a fast plain-split path.
+ */
+function splitDelimited(line: string, delimiter: string): string[] {
+  if (line.indexOf('"') === -1) return line.split(delimiter);
+
+  const out: string[] = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === delimiter) {
+      out.push(field);
+      field = '';
+    } else {
+      field += ch;
+    }
+  }
+  out.push(field);
+  return out;
+}
+
+/** Detect the field delimiter from the header line (tab vs comma). */
+function detectDelimiter(headerLine: string): string {
+  const tabs = (headerLine.match(/\t/g) || []).length;
+  const commas = (headerLine.match(/,/g) || []).length;
+  return commas > tabs ? ',' : '\t';
+}
+
 /** Resolve an image column: pass absolute URLs through, prefix bare filenames. */
 function resolveImageRef(value: string | undefined, base = CDN_CATALOG_BASE): string | null {
   const v = (value ?? '').trim();
@@ -334,11 +380,12 @@ export async function importSdlCatalog(opts: SdlImportOptions): Promise<SdlImpor
 
   let columns: string[] | null = null;
   let colIndex: Map<string, number> | null = null;
+  let delimiter = '\t';
   let currentStyle: string | null = null;
   let buffer: Row[] = [];
 
   const toRow = (line: string): Row => {
-    const cells = line.split('\t');
+    const cells = splitDelimited(line, delimiter);
     const row: Row = {};
     for (const [name, idx] of colIndex!) row[name] = cells[idx] ?? '';
     return row;
@@ -368,7 +415,11 @@ export async function importSdlCatalog(opts: SdlImportOptions): Promise<SdlImpor
     for await (const rawLine of rl) {
       const line = rawLine.replace(/\r$/, '');
       if (!columns) {
-        columns = line.split('\t').map((c) => c.trim());
+        // Strip a leading UTF-8 BOM so the first column name stays clean, then
+        // auto-detect tab vs comma from the header.
+        const headerLine = line.replace(/^\uFEFF/, '');
+        delimiter = detectDelimiter(headerLine);
+        columns = splitDelimited(headerLine, delimiter).map((c) => c.trim());
         colIndex = new Map(columns.map((c, i) => [c, i]));
         const missing = REQUIRED_COLUMNS.filter((c) => !colIndex!.has(c));
         if (missing.length) {
