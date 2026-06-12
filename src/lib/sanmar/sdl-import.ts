@@ -121,6 +121,19 @@ function splitDelimited(line: string, delimiter: string): string[] {
   return out;
 }
 
+/**
+ * Normalize a GTIN to digits, or null. Rejects Excel-mangled scientific
+ * notation (e.g. "1.94422E+11") rather than storing a lossy/invalid barcode —
+ * a sign the source CSV was opened in Excel; re-export the raw file for clean
+ * GTINs.
+ */
+function normalizeGtin(value: string | undefined): string | null {
+  const v = cleanText(value);
+  if (!v || /[eE]/.test(v)) return null;
+  const digits = v.replace(/\D/g, '');
+  return digits.length >= 8 ? digits : null;
+}
+
 /** Detect the field delimiter from the header line (tab vs comma). */
 function detectDelimiter(headerLine: string): string {
   const tabs = (headerLine.match(/\t/g) || []).length;
@@ -250,7 +263,7 @@ export function mapStyleRows(rows: Row[]): MappedStyle | null {
       casePrice: parseNum(r['CASE_PRICE']),
       caseSize: parseInteger(r['CASE_SIZE']),
       pieceWeight: parseNum(r['PIECE_WEIGHT']),
-      gtin: cleanText(r['GTIN']) || null,
+      gtin: normalizeGtin(r['GTIN']),
       sanmarCatalogColor: cleanText(r['SANMAR_MAINFRAME_COLOR']) || null,
       sanmarUniqueKey: cleanText(r['UNIQUE_KEY']) || null,
       sanmarPartId: cleanText(r['INVENTORY_KEY']) || null,
