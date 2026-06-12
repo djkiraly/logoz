@@ -41,6 +41,17 @@ if [ "$(id -u)" -ne 0 ]; then
   SUDO="sudo"
 fi
 
+# Run a command AS the postgres OS user (the DB superuser), whether we are root
+# or a sudo-capable user. Note: `$SUDO -u postgres ...` breaks when already root
+# (empty $SUDO leaves a dangling `-u`), so route everything through this helper.
+as_postgres() {
+  if command -v sudo >/dev/null 2>&1; then
+    sudo -u postgres "$@"
+  else
+    su -s /bin/sh postgres -c "$(printf '%q ' "$@")"
+  fi
+}
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -153,7 +164,7 @@ cmd_install() {
   local pw; pw="$(grep -E '^LOCAL_PG_PASSWORD=' "$PG_CONF_FILE" | cut -d= -f2-)"
 
   echo "[install] Creating role '$LOCAL_USER' and database '$LOCAL_DB' (idempotent)..."
-  $SUDO -u postgres psql -v ON_ERROR_STOP=1 <<SQL
+  as_postgres psql -v ON_ERROR_STOP=1 <<SQL
 DO \$\$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='${LOCAL_USER}') THEN
@@ -165,13 +176,13 @@ END
 \$\$;
 SQL
   # CREATE DATABASE can't run inside the DO block / a transaction; guard separately.
-  if ! $SUDO -u postgres psql -At -c "select 1 from pg_database where datname='${LOCAL_DB}'" | grep -q 1; then
-    $SUDO -u postgres createdb -O "$LOCAL_USER" "$LOCAL_DB"
+  if ! as_postgres psql -At -c "select 1 from pg_database where datname='${LOCAL_DB}'" | grep -q 1; then
+    as_postgres createdb -O "$LOCAL_USER" "$LOCAL_DB"
   fi
 
   # Headroom for PM2 cluster (one Prisma pool per worker). Raise max_connections.
   echo "[install] Raising max_connections to 200 for PM2 cluster headroom..."
-  $SUDO -u postgres psql -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET max_connections = 200;"
+  as_postgres psql -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET max_connections = 200;"
   $SUDO systemctl restart postgresql
 
   echo "[install] Local PG ready. Listening on localhost only (default)."
