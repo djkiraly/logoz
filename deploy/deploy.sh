@@ -75,7 +75,8 @@ if [ -f "$NGINX_SITE" ]; then
   # 127.0.0.1:<port> reference in the config is the upstream backend.
   if ! grep -q "server 127.0.0.1:${APP_PORT};" "$NGINX_SITE"; then
     echo "  Updating nginx upstream to 127.0.0.1:${APP_PORT}"
-    $SUDO sed -i -E "s|server 127\.0\.0\.1:[0-9]+;|server 127.0.0.1:${APP_PORT};|" "$NGINX_SITE"
+    # [0-9]* (not +) so a previously-malformed/empty port line also self-heals.
+    $SUDO sed -i -E "s|server 127\.0\.0\.1:[0-9]*;|server 127.0.0.1:${APP_PORT};|" "$NGINX_SITE"
   fi
 
   cert_missing=0
