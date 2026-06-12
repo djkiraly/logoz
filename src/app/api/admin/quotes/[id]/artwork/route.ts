@@ -9,6 +9,7 @@ import {
   logArtworkUploaded,
   logArtworkSentToCustomer,
   logArtworkUpdated,
+  logArtworkRemoved,
   logQuoteStatusChange,
 } from '@/lib/quote-audit';
 import { notifyArtworkForApproval } from '@/lib/notifications';
@@ -469,6 +470,11 @@ export async function DELETE(request: Request, context: RouteContext) {
       throw new ApiException('Quote not found', 404, 'NOT_FOUND');
     }
 
+    const statusReverted =
+      quote.status === 'ARTWORK_PENDING' ||
+      quote.status === 'ARTWORK_APPROVED' ||
+      quote.status === 'ARTWORK_DECLINED';
+
     // Reset artwork fields
     await prisma.quote.update({
       where: { id },
@@ -483,14 +489,23 @@ export async function DELETE(request: Request, context: RouteContext) {
         artworkVersion: 1,
         // Don't change artworkRequired - that's a quote setting
         // Revert status if it was artwork-related
-        ...(quote.status === 'ARTWORK_PENDING' ||
-        quote.status === 'ARTWORK_APPROVED' ||
-        quote.status === 'ARTWORK_DECLINED'
-          ? { status: 'PENDING' }
-          : {}),
+        ...(statusReverted ? { status: 'PENDING' } : {}),
         lastModifiedAt: new Date(),
       },
     });
+
+    // Audit trail: record the artwork removal and any status reversion.
+    const actor = { id: user.id, name: user.name, email: user.email };
+    await logArtworkRemoved(quote.id, quote.quoteNumber, quote.artworkFileName, actor);
+    if (statusReverted) {
+      await logQuoteStatusChange(
+        quote.id,
+        quote.quoteNumber,
+        quote.status,
+        'PENDING',
+        { type: 'ADMIN', id: user.id, name: user.name, email: user.email }
+      );
+    }
 
     reqLogger.info('Artwork removed from quote', {
       userId: user.id,

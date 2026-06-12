@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser, requireRole } from '@/lib/auth';
+import { getCurrentUser, requireRole, logAuditEvent } from '@/lib/auth';
 import { prisma, isDatabaseEnabled } from '@/lib/prisma';
 import { adminLogger } from '@/lib/logger';
 import { Prisma } from '@prisma/client';
@@ -12,6 +12,7 @@ import {
   logOwnerChanged,
   logPricingUpdated,
   logQuoteUpdated,
+  logQuoteDeleted,
 } from '@/lib/quote-audit';
 
 type RouteParams = {
@@ -468,6 +469,24 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Quote not found' }, { status: 404 });
     }
 
+    const deletionSnapshot = {
+      quoteNumber: existingQuote.quoteNumber,
+      status: existingQuote.status,
+      total: Number(existingQuote.total),
+      customerEmail: existingQuote.customerEmail,
+      customerName: existingQuote.customerName,
+    };
+
+    // Write the quote audit trail entry BEFORE deletion. Because the
+    // QuoteAuditLog relation now uses onDelete: SetNull, this record (and the
+    // rest of the quote's history) survives the delete instead of being wiped.
+    await logQuoteDeleted(
+      id,
+      existingQuote.quoteNumber,
+      { id: user.id, name: user.name, email: user.email },
+      deletionSnapshot
+    );
+
     // Delete the quote (line items will cascade delete)
     await prisma.quote.delete({
       where: { id },
@@ -478,6 +497,10 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       quoteId: id,
       quoteNumber: existingQuote.quoteNumber,
     });
+
+    // Durable, user-attributed record in the global audit log (this table is
+    // not related to Quote, so it is never cascade-affected).
+    await logAuditEvent(user.id, 'DELETE', 'QUOTE', id, deletionSnapshot);
 
     // Track entity activity
     await trackEntityActivity({

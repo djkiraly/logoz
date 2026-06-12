@@ -465,7 +465,11 @@ model Quote {
 
 model QuoteAuditLog {
   id            String              @id @default(cuid())
-  quoteId       String
+  // Nullable so the audit trail SURVIVES quote deletion (SetNull) instead of
+  // being cascade-wiped. quoteNumber is denormalized for traceability once the
+  // parent quote is gone.
+  quoteId       String?
+  quoteNumber   String?
   action        QuoteAuditAction
   description   String
   actorType     QuoteAuditActorType @default(ADMIN)
@@ -476,7 +480,7 @@ model QuoteAuditLog {
   newValue      Json?
   metadata      Json?
   createdAt     DateTime            @default(now())
-  quote         Quote               @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  quote         Quote?              @relation(fields: [quoteId], references: [id], onDelete: SetNull)
 
   @@index([action])
   @@index([createdAt(sort: Desc)])

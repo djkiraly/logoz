@@ -27,6 +27,7 @@ type QuoteAuditActorType = 'ADMIN' | 'CUSTOMER' | 'SYSTEM';
 
 type AuditLogParams = {
   quoteId: string;
+  quoteNumber?: string | null;
   action: QuoteAuditAction;
   description: string;
   actorType?: QuoteAuditActorType;
@@ -48,6 +49,7 @@ export async function logQuoteAudit(params: AuditLogParams): Promise<void> {
     await prisma.quoteAuditLog.create({
       data: {
         quoteId: params.quoteId,
+        quoteNumber: params.quoteNumber || null,
         action: params.action,
         description: params.description,
         actorType: params.actorType || 'SYSTEM',
@@ -85,6 +87,7 @@ export async function logQuoteCreated(
 ): Promise<void> {
   await logQuoteAudit({
     quoteId,
+    quoteNumber,
     action: 'CREATED',
     description: `Quote ${quoteNumber} created`,
     actorType: 'ADMIN',
@@ -138,6 +141,7 @@ export async function logQuoteSent(
 ): Promise<void> {
   await logQuoteAudit({
     quoteId,
+    quoteNumber,
     action: 'SENT_TO_CUSTOMER',
     description: `Quote sent to ${recipientEmail}`,
     actorType: 'ADMIN',
@@ -206,6 +210,7 @@ export async function logCustomerChanged(
 
   await logQuoteAudit({
     quoteId,
+    quoteNumber,
     action: 'CUSTOMER_CHANGED',
     description: `Customer changed from "${prevName}" to "${newName}"`,
     actorType: 'ADMIN',
@@ -232,6 +237,7 @@ export async function logOwnerChanged(
 
   await logQuoteAudit({
     quoteId,
+    quoteNumber,
     action: 'OWNER_CHANGED',
     description: `Owner changed from "${prevName}" to "${newName}"`,
     actorType: 'ADMIN',
@@ -261,6 +267,7 @@ export async function logPricingUpdated(
 
   await logQuoteAudit({
     quoteId,
+    quoteNumber,
     action: 'PRICING_UPDATED',
     description: `Pricing updated: ${changes.join(', ')} changed`,
     actorType: 'ADMIN',
@@ -285,6 +292,7 @@ export async function logQuoteUpdated(
 ): Promise<void> {
   await logQuoteAudit({
     quoteId,
+    quoteNumber,
     action: 'UPDATED',
     description: `Quote updated: ${changes.join(', ')}`,
     actorType: 'ADMIN',
@@ -335,6 +343,7 @@ export async function logArtworkUploaded(
 ): Promise<void> {
   await logQuoteAudit({
     quoteId,
+    quoteNumber,
     action: 'ARTWORK_UPLOADED',
     description: `Artwork "${artworkFileName}" uploaded (version ${artworkVersion})`,
     actorType: 'ADMIN',
@@ -357,6 +366,7 @@ export async function logArtworkSentToCustomer(
 ): Promise<void> {
   await logQuoteAudit({
     quoteId,
+    quoteNumber,
     action: 'ARTWORK_SENT_TO_CUSTOMER',
     description: `Artwork sent to ${recipientEmail} for approval`,
     actorType: 'ADMIN',
@@ -378,6 +388,7 @@ export async function logArtworkApprovedByCustomer(
 ): Promise<void> {
   await logQuoteAudit({
     quoteId,
+    quoteNumber,
     action: 'ARTWORK_APPROVED_BY_CUSTOMER',
     description: notes
       ? `Artwork approved by customer with notes: "${notes.substring(0, 100)}${notes.length > 100 ? '...' : ''}"`
@@ -399,6 +410,7 @@ export async function logArtworkDeclinedByCustomer(
 ): Promise<void> {
   await logQuoteAudit({
     quoteId,
+    quoteNumber,
     action: 'ARTWORK_DECLINED_BY_CUSTOMER',
     description: notes
       ? `Artwork declined by customer: "${notes.substring(0, 100)}${notes.length > 100 ? '...' : ''}"`
@@ -424,6 +436,7 @@ export async function logArtworkUpdated(
 ): Promise<void> {
   await logQuoteAudit({
     quoteId,
+    quoteNumber,
     action: 'ARTWORK_UPDATED',
     description: `Artwork updated to version ${newVersion}: "${newFileName}"`,
     actorType: 'ADMIN',
@@ -432,6 +445,31 @@ export async function logArtworkUpdated(
     actorEmail: actor.email,
     previousValue: { artworkFileName: previousFileName, artworkUrl: previousArtworkUrl },
     newValue: { artworkFileName: newFileName, artworkVersion: newVersion, artworkUrl: newArtworkUrl },
+  });
+}
+
+/**
+ * Log artwork removal (admin reset all artwork fields on a quote)
+ */
+export async function logArtworkRemoved(
+  quoteId: string,
+  quoteNumber: string,
+  previousFileName: string | null,
+  actor: { id: string; name: string; email: string }
+): Promise<void> {
+  await logQuoteAudit({
+    quoteId,
+    quoteNumber,
+    action: 'ARTWORK_UPDATED',
+    description: previousFileName
+      ? `Artwork "${previousFileName}" removed from quote`
+      : 'Artwork removed from quote',
+    actorType: 'ADMIN',
+    actorId: actor.id,
+    actorName: actor.name,
+    actorEmail: actor.email,
+    previousValue: { artworkFileName: previousFileName },
+    newValue: { artworkFileName: null },
   });
 }
 
@@ -445,11 +483,37 @@ export async function logQuoteApprovedByCustomer(
 ): Promise<void> {
   await logQuoteAudit({
     quoteId,
+    quoteNumber,
     action: 'APPROVED_BY_CUSTOMER',
     description: `Quote approved by customer (${customerEmail})`,
     actorType: 'CUSTOMER',
     actorEmail: customerEmail,
     newValue: { approvedAt: new Date().toISOString() },
+  });
+}
+
+/**
+ * Log quote deletion. Written immediately BEFORE the quote row is removed so
+ * the entry persists (the quoteId is set to null by onDelete: SetNull rather
+ * than cascade-deleted). quoteNumber is denormalized so the orphaned record
+ * remains identifiable.
+ */
+export async function logQuoteDeleted(
+  quoteId: string,
+  quoteNumber: string,
+  actor: { id: string; name: string; email: string },
+  snapshot?: Record<string, unknown>
+): Promise<void> {
+  await logQuoteAudit({
+    quoteId,
+    quoteNumber,
+    action: 'DELETED',
+    description: `Quote ${quoteNumber} deleted by ${actor.name}`,
+    actorType: 'ADMIN',
+    actorId: actor.id,
+    actorName: actor.name,
+    actorEmail: actor.email,
+    previousValue: snapshot || null,
   });
 }
 
@@ -464,6 +528,7 @@ export async function logQuoteDeclinedByCustomer(
 ): Promise<void> {
   await logQuoteAudit({
     quoteId,
+    quoteNumber,
     action: 'DECLINED_BY_CUSTOMER',
     description: `Quote declined by customer (${customerEmail})${notes ? `: "${notes}"` : ''}`,
     actorType: 'CUSTOMER',
