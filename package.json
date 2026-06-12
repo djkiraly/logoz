@@ -1,6 +1,6 @@
 {
   "name": "web",
-  "version": "0.1.23",
+  "version": "0.1.24",
   "private": true,
   "scripts": {
     "postinstall": "prisma generate",
@@ -20,6 +20,7 @@
     "db:migrate:status": "prisma migrate status",
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
+    "import:sanmar": "tsx scripts/import-sanmar-catalog.ts",
     "pm2:start": "pm2 start ecosystem.config.cjs",
     "pm2:stop": "pm2 stop logoz",
     "pm2:restart": "pm2 restart logoz",

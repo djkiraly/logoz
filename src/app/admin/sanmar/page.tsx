@@ -15,6 +15,9 @@ import {
   TestTube,
   Eye,
   EyeOff,
+  Upload,
+  Trash2,
+  FileText,
 } from 'lucide-react';
 
 type SanMarConfig = {
@@ -55,6 +58,12 @@ type LocalCategory = {
   slug: string;
 };
 
+type CatalogFile = {
+  name: string;
+  size: number;
+  modifiedAt: string;
+};
+
 type SyncHistoryItem = {
   id: string;
   syncType: string;
@@ -75,7 +84,7 @@ export default function SanMarSettingsPage() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [activeTab, setActiveTab] = useState<'credentials' | 'sync' | 'categories' | 'history'>('credentials');
+  const [activeTab, setActiveTab] = useState<'credentials' | 'sync' | 'categories' | 'catalog' | 'history'>('credentials');
 
   // Config state
   const [config, setConfig] = useState<SanMarConfig | null>(null);
@@ -101,6 +110,12 @@ export default function SanMarSettingsPage() {
   // Sync history
   const [syncHistory, setSyncHistory] = useState<SyncHistoryItem[]>([]);
 
+  // Catalog upload
+  const [catalogFiles, setCatalogFiles] = useState<CatalogFile[]>([]);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+
   // Manual sync options
   const [syncType, setSyncType] = useState<'category' | 'brand' | 'product'>('category');
   const [syncTarget, setSyncTarget] = useState('');
@@ -112,6 +127,8 @@ export default function SanMarSettingsPage() {
   useEffect(() => {
     if (activeTab === 'categories') {
       fetchCategoryMappings();
+    } else if (activeTab === 'catalog') {
+      fetchCatalogFiles();
     } else if (activeTab === 'history') {
       fetchSyncHistory();
     }
@@ -170,6 +187,99 @@ export default function SanMarSettingsPage() {
       }
     } catch (error) {
       console.error('Failed to fetch sync history:', error);
+    }
+  };
+
+  const fetchCatalogFiles = async () => {
+    try {
+      const response = await fetch('/api/admin/sanmar/catalog');
+      const data = await response.json();
+      if (data.ok) {
+        setCatalogFiles(data.data.files || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch catalog files:', error);
+    }
+  };
+
+  const formatBytes = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    const units = ['KB', 'MB', 'GB'];
+    let value = bytes / 1024;
+    let unit = 0;
+    while (value >= 1024 && unit < units.length - 1) {
+      value /= 1024;
+      unit += 1;
+    }
+    return `${value.toFixed(1)} ${units[unit]}`;
+  };
+
+  const handleUploadCatalog = () => {
+    if (!selectedFile) {
+      setMessage({ type: 'error', text: 'Choose a catalog file first' });
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadProgress(0);
+    setMessage(null);
+
+    // Use XHR (not fetch) so we can show upload progress for very large files.
+    // The File is sent as the raw request body and streamed to disk server-side.
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/admin/sanmar/catalog');
+    xhr.setRequestHeader('x-filename', selectedFile.name);
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        setUploadProgress(Math.round((event.loaded / event.total) * 100));
+      }
+    };
+
+    xhr.onload = () => {
+      setIsUploading(false);
+      setUploadProgress(0);
+      let body: { ok?: boolean; error?: string } = {};
+      try {
+        body = JSON.parse(xhr.responseText);
+      } catch {
+        // fall through to status check
+      }
+      if (xhr.status >= 200 && xhr.status < 300 && body.ok) {
+        setMessage({ type: 'success', text: `Uploaded "${selectedFile.name}". Run the importer on the server to begin the import.` });
+        setSelectedFile(null);
+        fetchCatalogFiles();
+      } else {
+        setMessage({ type: 'error', text: body.error || `Upload failed (HTTP ${xhr.status})` });
+      }
+    };
+
+    xhr.onerror = () => {
+      setIsUploading(false);
+      setUploadProgress(0);
+      setMessage({ type: 'error', text: 'Upload failed (network error)' });
+    };
+
+    xhr.send(selectedFile);
+  };
+
+  const handleDeleteCatalog = async (name: string) => {
+    if (!window.confirm(`Delete "${name}"? This frees disk space and cannot be undone.`)) {
+      return;
+    }
+    try {
+      const response = await fetch(`/api/admin/sanmar/catalog?name=${encodeURIComponent(name)}`, {
+        method: 'DELETE',
+      });
+      const data = await response.json();
+      if (data.ok) {
+        setMessage({ type: 'success', text: `Deleted "${name}"` });
+        fetchCatalogFiles();
+      } else {
+        throw new Error(data.error || 'Failed to delete file');
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Failed to delete' });
     }
   };
 
@@ -425,6 +535,7 @@ export default function SanMarSettingsPage() {
           { id: 'credentials', label: 'Credentials', icon: Settings },
           { id: 'sync', label: 'Sync Settings', icon: RefreshCw },
           { id: 'categories', label: 'Category Mapping', icon: FolderTree },
+          { id: 'catalog', label: 'Catalog Upload', icon: Upload },
           { id: 'history', label: 'Sync History', icon: History },
         ].map((tab) => (
           <button
@@ -758,6 +869,113 @@ export default function SanMarSettingsPage() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Catalog Upload Tab */}
+      {activeTab === 'catalog' && (
+        <div className="space-y-6">
+          {/* Upload card */}
+          <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl">
+            <div className="p-5 border-b border-white/10">
+              <h2 className="text-lg font-semibold text-white">Upload Catalog File</h2>
+              <p className="text-sm text-slate-400">
+                Upload the SanMar catalog data file (.txt / .csv / .tsv). Large files are streamed,
+                so size is not a concern. After uploading, run the importer on the server.
+              </p>
+            </div>
+            <div className="p-5 space-y-5">
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-slate-300 cursor-pointer hover:bg-white/10 transition-colors">
+                  <FileText className="w-4 h-4" />
+                  {selectedFile ? selectedFile.name : 'Choose file...'}
+                  <input
+                    type="file"
+                    accept=".txt,.csv,.tsv"
+                    className="hidden"
+                    disabled={isUploading}
+                    onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
+                  />
+                </label>
+                {selectedFile && (
+                  <span className="text-sm text-slate-400">{formatBytes(selectedFile.size)}</span>
+                )}
+                <button
+                  onClick={handleUploadCatalog}
+                  disabled={isUploading || !selectedFile}
+                  className="flex items-center gap-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  Upload
+                </button>
+              </div>
+
+              {isUploading && (
+                <div className="space-y-1">
+                  <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-cyan-500 transition-all"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-slate-400">{uploadProgress}% uploaded</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Stored files card */}
+          <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl">
+            <div className="p-5 border-b border-white/10 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Stored Catalog Files</h2>
+                <p className="text-sm text-slate-400">
+                  Files available to the importer. Delete a file to free disk space once imported.
+                </p>
+              </div>
+              <button
+                onClick={fetchCatalogFiles}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Refresh
+              </button>
+            </div>
+            <div className="p-5">
+              {catalogFiles.length === 0 ? (
+                <p className="text-slate-400 text-center py-8">No catalog files uploaded yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {catalogFiles.map((file) => (
+                    <div
+                      key={file.name}
+                      className="flex items-center justify-between gap-4 p-4 bg-white/5 border border-white/10 rounded-lg"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <FileText className="w-5 h-5 text-cyan-400 shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-white truncate">{file.name}</p>
+                          <p className="text-xs text-slate-400">
+                            {formatBytes(file.size)} · {new Date(file.modifiedAt).toLocaleString()}
+                          </p>
+                          <p className="text-xs text-slate-500 mt-1 font-mono">
+                            npm run import:sanmar -- {file.name}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteCatalog(file.name)}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg hover:bg-red-500/20 transition-colors shrink-0"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Delete
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

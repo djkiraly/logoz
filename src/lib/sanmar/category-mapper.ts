@@ -5,7 +5,7 @@
 
 import { prisma } from '../prisma';
 import { adminLogger } from '../logger';
-import { SANMAR_CATEGORIES, SanMarCategory } from './types';
+import { SANMAR_CATEGORIES } from './types';
 
 export interface CategoryMappingResult {
   categoryId: string | null;
@@ -199,6 +199,58 @@ async function autoCreateCategory(sanmarCategory: string): Promise<string | null
     });
     return null;
   }
+}
+
+/**
+ * Category builder: return the local Category id for a SanMar category name,
+ * creating the category if it does not exist yet. Unlike `getCategoryMapping`
+ * (which returns null for unmapped categories), this ALWAYS resolves to a real
+ * category — it is the entry point used by the catalog importer so every product
+ * lands somewhere.
+ *
+ * Resolution order:
+ *   1. Explicit admin mapping (SanMarCategoryMapping.localCategoryId) wins.
+ *   2. Existing Category matched by slug.
+ *   3. Otherwise create a new Category (curated description when known) and
+ *      record the mapping so the admin UI reflects where products landed.
+ */
+export async function ensureCategory(sanmarCategory: string): Promise<string> {
+  const normalized = normalizeCategoryName(sanmarCategory) || 'Uncategorized';
+
+  const cached = categoryCache.get(normalized);
+  if (cached) return cached;
+
+  // 1. Honor an explicit admin mapping.
+  const mapping = await prisma.sanMarCategoryMapping.findUnique({
+    where: { sanmarCategory: normalized },
+  });
+  if (mapping?.localCategoryId) {
+    categoryCache.set(normalized, mapping.localCategoryId);
+    return mapping.localCategoryId;
+  }
+
+  // 2 + 3. Find the category by slug, or build it if missing.
+  const slug = generateSlug(normalized) || 'uncategorized';
+  const category = await prisma.category.upsert({
+    where: { slug },
+    create: {
+      slug,
+      title: normalized,
+      description: DEFAULT_DESCRIPTIONS[normalized] || `Products from the ${normalized} category.`,
+      featured: false,
+    },
+    update: {},
+  });
+
+  // Record/refresh the mapping so the admin UI shows where products landed.
+  await prisma.sanMarCategoryMapping.upsert({
+    where: { sanmarCategory: normalized },
+    create: { sanmarCategory: normalized, localCategoryId: category.id, autoCreate: true },
+    update: { localCategoryId: category.id },
+  });
+
+  categoryCache.set(normalized, category.id);
+  return category.id;
 }
 
 /**

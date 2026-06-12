@@ -355,6 +355,7 @@ model Product {
   description        String
   heroImageUrl       String?
   gallery            String[]
+  colorImages        Json?
   basePrice          Decimal             @db.Money
   minQuantity        Int                 @default(1)
   categoryId         String

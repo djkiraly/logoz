@@ -50,6 +50,7 @@ export {
 // Category Mapper
 export {
   getCategoryMapping,
+  ensureCategory,
   initializeCategoryMappings,
   getAllCategoryMappings,
   updateCategoryMapping as updateCategoryMappingEntry,

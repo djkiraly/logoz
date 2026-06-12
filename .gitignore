@@ -44,3 +44,7 @@ next-env.d.ts
 
 # Windows reserved names
 nul
+
+# Uploaded SanMar catalog files (large; stored on the box, never committed)
+/data/sanmar-catalog/
+.catalog-test/
