@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import Link from 'next/link';
 import { Filter, X } from 'lucide-react';
 
 type Category = {
@@ -135,9 +136,10 @@ export function ProductFilter({ products, categories }: ProductFilterProps) {
         ) : (
           <div className="grid gap-5 md:grid-cols-3">
             {filteredProducts.map((product) => (
-              <article
+              <Link
                 key={product.sku}
-                className="group flex flex-col rounded-3xl border border-white/10 bg-white/5 p-5"
+                href={`/products/${encodeURIComponent(product.sku)}`}
+                className="group flex flex-col rounded-3xl border border-white/10 bg-white/5 p-5 transition-colors hover:bg-white/10"
               >
                 <div className="aspect-[4/3] overflow-hidden rounded-2xl bg-black/30">
                   {product.heroImageUrl ? (
@@ -172,7 +174,7 @@ export function ProductFilter({ products, categories }: ProductFilterProps) {
                     </p>
                   </div>
                 </div>
-              </article>
+              </Link>
             ))}
           </div>
         )}

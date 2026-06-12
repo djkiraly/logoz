@@ -132,6 +132,8 @@ export const getProducts = cache(async () =>
     () =>
       prisma.product.findMany({
         where: { visible: true },
+        // Never expose supplier cost on public pages.
+        omit: { cost: true },
         include: { category: true, supplier: true },
         take: 12,
         orderBy: [
@@ -142,6 +144,129 @@ export const getProducts = cache(async () =>
     fallback.products,
   ),
 );
+
+export type PublicColorImage = {
+  color: string;
+  swatch: string | null;
+  front: string | null;
+  back: string | null;
+  frontFlat: string | null;
+  backFlat: string | null;
+};
+
+export type PublicProductDetail = {
+  id: string;
+  sku: string;
+  name: string;
+  description: string;
+  heroImageUrl: string | null;
+  gallery: string[];
+  images: string[];
+  colorImages: PublicColorImage[];
+  basePrice: number;
+  minQuantity: number;
+  fulfillment: string[];
+  productStatus: string;
+  featured: boolean;
+  category: { title: string; slug: string } | null;
+  supplier: { name: string } | null;
+  colors: string[];
+  sizes: string[];
+};
+
+// Apparel size ordering for display; unknown sizes sort to the end alphabetically.
+const SIZE_ORDER = [
+  'XS', 'S', 'SM', 'M', 'MD', 'L', 'LG', 'XL', 'XLT',
+  '2XL', 'XXL', '3XL', 'XXXL', '4XL', '5XL', '6XL', 'OSFA', 'ONE SIZE',
+];
+
+function sortSizes(sizes: string[]): string[] {
+  return [...sizes].sort((a, b) => {
+    const ia = SIZE_ORDER.indexOf(a.toUpperCase());
+    const ib = SIZE_ORDER.indexOf(b.toUpperCase());
+    if (ia === -1 && ib === -1) return a.localeCompare(b);
+    if (ia === -1) return 1;
+    if (ib === -1) return -1;
+    return ia - ib;
+  });
+}
+
+function dedupe(values: (string | null | undefined)[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const v of values) {
+    if (v && !seen.has(v)) {
+      seen.add(v);
+      out.push(v);
+    }
+  }
+  return out;
+}
+
+/**
+ * Fetch a single visible product for the public detail page. Returns ONLY
+ * public-safe fields — supplier cost and per-variant wholesale prices are never
+ * selected, so they cannot leak into the client payload.
+ */
+export const getProductBySku = cache(async (sku: string): Promise<PublicProductDetail | null> => {
+  if (!isDatabaseEnabled) return null;
+
+  try {
+    const product = await prisma.product.findFirst({
+      where: { sku, visible: true },
+      select: {
+        id: true,
+        sku: true,
+        name: true,
+        description: true,
+        heroImageUrl: true,
+        gallery: true,
+        colorImages: true,
+        basePrice: true,
+        minQuantity: true,
+        fulfillment: true,
+        productStatus: true,
+        featured: true,
+        category: { select: { title: true, slug: true } },
+        supplier: { select: { name: true } },
+        variants: { select: { color: true, size: true } },
+      },
+    });
+
+    if (!product) return null;
+
+    const colorImages = (product.colorImages as PublicColorImage[] | null) ?? [];
+    const images = dedupe([product.heroImageUrl, ...product.gallery]);
+    const colors = dedupe(product.variants.map((v) => v.color));
+    const sizes = sortSizes(dedupe(product.variants.map((v) => v.size)));
+
+    return {
+      id: product.id,
+      sku: product.sku,
+      name: product.name,
+      description: product.description,
+      heroImageUrl: product.heroImageUrl,
+      gallery: product.gallery,
+      images,
+      colorImages,
+      basePrice: Number(product.basePrice),
+      minQuantity: product.minQuantity,
+      fulfillment: product.fulfillment,
+      productStatus: product.productStatus,
+      featured: product.featured,
+      category: product.category,
+      supplier: product.supplier,
+      colors,
+      sizes,
+    };
+  } catch (error) {
+    dbLogger.warn('Failed to load product by sku', {
+      sku,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+});
 
 export const getCollections = cache(async () =>
   loadOrFallback(

@@ -19,7 +19,6 @@ export default async function ProductsPage() {
     ...product,
     categoryId: product.categoryId || product.category?.id,
     basePrice: product.basePrice ? Number(product.basePrice) : 0,
-    cost: product.cost ? Number(product.cost) : null,
   }));
 
   return (
