@@ -417,6 +417,28 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       { id: user.id, name: user.name, email: user.email }
     );
 
+    // Record the customer delivery in the notification log so it is tracked
+    // alongside template-driven notifications (the email body itself is the
+    // richer inline template, not the CUSTOMER_QUOTE_SENT template).
+    await prisma.notificationLog.create({
+      data: {
+        type: 'CUSTOMER_QUOTE_SENT',
+        channel: 'EMAIL',
+        recipientEmail,
+        recipientName: quote.customer?.contactName || quote.customerName || null,
+        subject: `Quote ${quote.quoteNumber}${quote.title ? `: ${quote.title}` : ''} from ${siteName}`,
+        status: 'sent',
+        sentAt: new Date(),
+        quoteId: id,
+        customerId: quote.customerId || null,
+      },
+    }).catch((err) => {
+      adminLogger.error('Failed to record quote-sent notification log', {
+        quoteId: id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+
     // Track activity (only if status actually changed)
     if (quote.status === 'PENDING' || quote.status === 'REVIEWING') {
       await trackEntityActivity({

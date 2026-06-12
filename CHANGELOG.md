@@ -38,6 +38,17 @@ workflows. Findings came from a workflow audit; tracked as P0/P1/P2.
 - Configure `next.config.ts` `images.remotePatterns` for `cdnm.sanmar.com` and
   `cdn.sanmar.com` so synced SanMar product images render via `next/image`.
 
+### Notifications
+- Wire up previously-dead notification paths (each still gated by its
+  `NotificationSetting.enabled` flag): `INTERNAL_QUOTE_CREATED` fires on quote
+  creation; `INTERNAL_/CUSTOMER_QUOTE_STATUS_CHANGE` fire on admin-initiated
+  status changes; `INTERNAL_ARTWORK_RESPONSE` (+ direct owner email) fires when
+  a customer approves/declines artwork.
+- Notify the quote owner when a customer approves/declines the quote via the
+  artwork token flow (previously only the main quote-token path did this).
+- Record a `NotificationLog` entry when a quote is emailed to a customer so the
+  delivery is tracked.
+
 ### Audit trail
 - Quote and artwork deletions are now audited (enforces the CLAUDE.md rule that
   every quote mutation writes an audit entry). `logQuoteDeleted` writes a

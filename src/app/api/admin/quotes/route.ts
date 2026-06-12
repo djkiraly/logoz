@@ -5,6 +5,7 @@ import { adminLogger } from '@/lib/logger';
 import { Prisma } from '@prisma/client';
 import { trackEntityActivity, trackQuoteFunnelEvent } from '@/lib/analytics';
 import { logQuoteCreated } from '@/lib/quote-audit';
+import { notifyQuoteCreated } from '@/lib/notifications';
 
 // Generate a unique quote number
 async function generateQuoteNumber(): Promise<string> {
@@ -351,6 +352,20 @@ export async function POST(request: NextRequest) {
       quoteId: quote.id,
       customerId: quote.customerId || undefined,
       productIds: quote.lineItems.map(li => li.productId).filter(Boolean) as string[],
+    });
+
+    // Notify internal team of the new quote (no-op unless the
+    // INTERNAL_QUOTE_CREATED notification is enabled and configured).
+    await notifyQuoteCreated({
+      id: quote.id,
+      quoteNumber: quote.quoteNumber,
+      total: quote.total.toString(),
+      status: quote.status,
+      customerName: quote.customerName || quote.customer?.contactName || null,
+      customerEmail: quote.customerEmail || quote.customer?.email || null,
+      customerCompany: quote.customerCompany || quote.customer?.companyName || null,
+      title: quote.title,
+      validUntil: quote.validUntil ? quote.validUntil.toISOString() : null,
     });
 
     return NextResponse.json({ ok: true, data: quote }, { status: 201 });

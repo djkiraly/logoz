@@ -10,6 +10,7 @@ import {
   logQuoteApprovedByCustomer,
   logQuoteDeclinedByCustomer,
 } from '@/lib/quote-audit';
+import { notifyArtworkResponse, notifyQuoteOwnerStatusChange } from '@/lib/notifications';
 
 export const dynamic = 'force-dynamic';
 
@@ -152,7 +153,11 @@ export async function POST(request: Request, context: RouteContext) {
       select: {
         id: true,
         quoteNumber: true,
+        title: true,
+        total: true,
         artworkUrl: true,
+        artworkFileName: true,
+        artworkVersion: true,
         artworkSentAt: true,
         artworkApprovedAt: true,
         artworkDeclinedAt: true,
@@ -160,9 +165,20 @@ export async function POST(request: Request, context: RouteContext) {
         approvedAt: true,
         declinedAt: true,
         status: true,
+        customerName: true,
+        customerCompany: true,
         customerEmail: true,
         customer: {
           select: {
+            email: true,
+            contactName: true,
+            companyName: true,
+          },
+        },
+        owner: {
+          select: {
+            id: true,
+            name: true,
             email: true,
           },
         },
@@ -253,6 +269,25 @@ export async function POST(request: Request, context: RouteContext) {
         email: customerEmail,
       });
 
+      // Notify the quote owner that the customer approved/declined.
+      if (quote.owner?.email) {
+        await notifyQuoteOwnerStatusChange(
+          {
+            id: quote.id,
+            quoteNumber: quote.quoteNumber,
+            total: quote.total.toString(),
+            status: newStatus,
+            customerName: quote.customerName || quote.customer?.contactName || null,
+            customerEmail: customerEmail === 'unknown' ? null : customerEmail,
+            customerCompany: quote.customerCompany || quote.customer?.companyName || null,
+            title: quote.title,
+          },
+          { id: quote.owner.id, name: quote.owner.name, email: quote.owner.email },
+          previousStatus,
+          newStatus
+        );
+      }
+
       reqLogger.info('Customer responded to quote', {
         quoteId: quote.id,
         action,
@@ -315,6 +350,32 @@ export async function POST(request: Request, context: RouteContext) {
       type: 'CUSTOMER',
       email: customerEmail,
     });
+
+    // Notify the internal team / quote owner that the customer responded to the
+    // artwork (INTERNAL_ARTWORK_RESPONSE gated by setting; owner email direct).
+    await notifyArtworkResponse(
+      {
+        id: quote.id,
+        quoteNumber: quote.quoteNumber,
+        total: quote.total.toString(),
+        status: newStatus,
+        customerName: quote.customerName || quote.customer?.contactName || null,
+        customerEmail: customerEmail === 'unknown' ? null : customerEmail,
+        customerCompany: quote.customerCompany || quote.customer?.companyName || null,
+        title: quote.title,
+      },
+      quote.owner
+        ? { id: quote.owner.id, name: quote.owner.name, email: quote.owner.email }
+        : undefined,
+      {
+        url: quote.artworkUrl || '',
+        fileName: quote.artworkFileName || 'artwork',
+        version: quote.artworkVersion,
+        approvalUrl: '',
+        notes: notes || null,
+        action: isApproved ? 'approved' : 'declined',
+      }
+    );
 
     reqLogger.info('Customer responded to artwork', {
       quoteId: quote.id,

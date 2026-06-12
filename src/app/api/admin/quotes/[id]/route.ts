@@ -14,6 +14,7 @@ import {
   logQuoteUpdated,
   logQuoteDeleted,
 } from '@/lib/quote-audit';
+import { notifyQuoteStatusChange } from '@/lib/notifications';
 
 type RouteParams = {
   params: Promise<{ id: string }>;
@@ -416,6 +417,24 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
           customerId: quote.customerId || undefined,
         });
       }
+
+      // Fire internal + customer status-change notifications (each gated by its
+      // own NotificationSetting.enabled flag, so this is a no-op until enabled).
+      await notifyQuoteStatusChange(
+        {
+          id: quote.id,
+          quoteNumber: quote.quoteNumber,
+          total: quote.total.toString(),
+          status: quote.status,
+          customerName: quote.customerName || quote.customer?.contactName || null,
+          customerEmail: quote.customerEmail || quote.customer?.email || null,
+          customerCompany: quote.customerCompany || quote.customer?.companyName || null,
+          title: quote.title,
+          validUntil: quote.validUntil ? quote.validUntil.toISOString() : null,
+        },
+        existingQuote.status,
+        status
+      );
     } else {
       // Track general update
       await trackEntityActivity({
