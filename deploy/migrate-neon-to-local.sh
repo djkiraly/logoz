@@ -65,6 +65,25 @@ read_env() {
     | sed -E "s/^\s*${key}\s*=\s*//; s/^\"//; s/\"\s*$//; s/^'//; s/'\s*$//"
 }
 
+# Set KEY="value" in the app .env, replacing the first active KEY= line (NOT
+# KEY_NEON), appending if absent. Uses awk with the value passed via ENVIRON so
+# it is a literal string -- connection strings full of &, /, \ and | are safe
+# (sed would mis-handle these in the replacement; that bug corrupted cutover).
+set_env_var() {
+  local key="$1" value="$2"
+  if grep -qE "^[[:space:]]*${key}[[:space:]]*=" "$ENV_FILE"; then
+    KEY="$key" VAL="$value" awk '
+      BEGIN { k=ENVIRON["KEY"]; v=ENVIRON["VAL"]; replaced=0 }
+      !replaced && $0 ~ ("^[[:space:]]*" k "[[:space:]]*=") {
+        print k "=\"" v "\""; replaced=1; next
+      }
+      { print }
+    ' "$ENV_FILE" > "$ENV_FILE.tmp" && mv "$ENV_FILE.tmp" "$ENV_FILE"
+  else
+    printf '%s="%s"\n' "$key" "$value" >> "$ENV_FILE"
+  fi
+}
+
 # Neon's pooled (PgBouncer) host cannot serve pg_dump; derive the DIRECT host by
 # removing "-pooler" from the hostname. Also drop channel_binding (libpq-only).
 neon_direct_url() {
@@ -272,9 +291,11 @@ cmd_cutover() {
   grep -q '^DATABASE_URL_NEON=' "$ENV_FILE" || echo "DATABASE_URL_NEON=\"$neon_db\"" >> "$ENV_FILE"
   grep -q '^DIRECT_URL_NEON='   "$ENV_FILE" || echo "DIRECT_URL_NEON=\"$neon_direct\"" >> "$ENV_FILE"
 
-  # Repoint the active URLs to local.
-  sed -i -E "s|^(\s*DATABASE_URL\s*=).*|\1\"$url\"|" "$ENV_FILE"
-  sed -i -E "s|^(\s*DIRECT_URL\s*=).*|\1\"$(local_url)\"|" "$ENV_FILE"
+  # Repoint the active URLs to local. Connection strings contain `&` (and the
+  # Neon ones `&channel_binding=...`); unescaped, sed treats `&` as "the whole
+  # match" and `|`/`\` as metachars, corrupting the line. Escape the replacement.
+  set_env_var DATABASE_URL "$url"
+  set_env_var DIRECT_URL "$(local_url)"
 
   echo "[cutover] .env now points at local PG (connection_limit=$limit across $cores cores)."
   echo "[cutover] Neon preserved as DATABASE_URL_NEON / DIRECT_URL_NEON for rollback."
@@ -325,8 +346,8 @@ cmd_rollback() {
   neon_db="$(read_env DATABASE_URL_NEON)"
   neon_direct="$(read_env DIRECT_URL_NEON)"
   [ -n "$neon_db" ] || die "DATABASE_URL_NEON not found; cannot auto-rollback. Restore from an .env.bak-* file."
-  sed -i -E "s|^(\s*DATABASE_URL\s*=).*|\1\"$neon_db\"|" "$ENV_FILE"
-  sed -i -E "s|^(\s*DIRECT_URL\s*=).*|\1\"$neon_direct\"|" "$ENV_FILE"
+  set_env_var DATABASE_URL "$neon_db"
+  set_env_var DIRECT_URL "$neon_direct"
   pm2 reload ecosystem.config.cjs --update-env
   pm2 save
   echo "[rollback] Reverted to Neon and reloaded PM2."
