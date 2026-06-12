@@ -15,6 +15,7 @@ import {
 } from '@/lib/api-utils';
 import { createRequestLogger } from '@/lib/logger';
 import { getCurrentUser } from '@/lib/auth';
+import { notifyQuoteCreated } from '@/lib/notifications';
 
 export async function GET(request: Request) {
   try {
@@ -168,6 +169,20 @@ export async function POST(request: Request) {
         quoteId: quote.id,
         email: quote.email,
         service: quote.serviceType,
+      });
+
+      // Notify the internal team of the new website lead so it isn't lost in the
+      // QuoteRequest table. Reuses the INTERNAL_QUOTE_CREATED notification (gated
+      // by its enabled flag) with a lead-shaped context.
+      await notifyQuoteCreated({
+        id: quote.id,
+        quoteNumber: `LEAD-${quote.id.slice(-6).toUpperCase()}`,
+        total: 0,
+        status: 'PENDING',
+        customerName: quote.contactName,
+        customerEmail: quote.email,
+        customerCompany: quote.company,
+        title: `Website lead — ${quote.serviceType}, qty ${quote.quantity}`,
       });
     } else {
       reqLogger.info('Quote request processed (no database)', {

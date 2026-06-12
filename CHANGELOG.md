@@ -38,6 +38,17 @@ workflows. Findings came from a workflow audit; tracked as P0/P1/P2.
 - Configure `next.config.ts` `images.remotePatterns` for `cdnm.sanmar.com` and
   `cdn.sanmar.com` so synced SanMar product images render via `next/image`.
 
+### Funnel & lead pipeline
+- Wire `useQuoteFunnelTracker` into the public quote form (`STARTED_QUOTE` on
+  engagement, `SUBMITTED_INFO` on success). The hook was defined but never used,
+  so `convertedToQuote` and the conversion rate were permanently 0.
+- Notify the internal team when a public website lead (`QuoteRequest`) is
+  submitted — leads were previously written to the table with no alert.
+- Reconcile customer approval paths: the main quote link now accepts an
+  approve/decline from `SENT` or any `ARTWORK_*` state (when not already
+  responded), so a quote in an artwork stage is no longer un-approvable there.
+  The response update is now atomic, closing a concurrent double-submit race.
+
 ### Notifications
 - Wire up previously-dead notification paths (each still gated by its
   `NotificationSetting.enabled` flag): `INTERNAL_QUOTE_CREATED` fires on quote

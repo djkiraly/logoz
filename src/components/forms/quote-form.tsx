@@ -3,6 +3,7 @@
 import { useState, useRef, useId } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { quoteSchema, type QuotePayload } from '@/lib/validation';
+import { useQuoteFunnelTracker } from '@/components/analytics/page-tracker';
 
 type QuoteFormProps = {
   services: { slug: string; title: string; method?: string }[];
@@ -26,6 +27,18 @@ export function QuoteForm({ services }: QuoteFormProps) {
   const [formError, setFormError] = useState<string | null>(null);
   const successMessageRef = useRef<HTMLDivElement>(null);
   const errorMessageRef = useRef<HTMLDivElement>(null);
+
+  // Funnel tracking: STARTED_QUOTE once the visitor engages the form, then
+  // SUBMITTED_INFO on a successful submission (this is the stage that drives the
+  // conversion rate and marks the analytics session as converted).
+  const { trackFunnelEvent } = useQuoteFunnelTracker();
+  const hasStartedRef = useRef(false);
+  const markStarted = () => {
+    if (!hasStartedRef.current) {
+      hasStartedRef.current = true;
+      void trackFunnelEvent('STARTED_QUOTE');
+    }
+  };
 
   const mutation = useMutation({
     mutationFn: async (payload: QuotePayload) => {
@@ -55,6 +68,9 @@ export function QuoteForm({ services }: QuoteFormProps) {
       });
       setFieldErrors({});
       setFormError(null);
+
+      // Record the conversion in the quote funnel.
+      void trackFunnelEvent('SUBMITTED_INFO');
 
       // Focus success message for screen readers
       setTimeout(() => {
@@ -103,6 +119,7 @@ export function QuoteForm({ services }: QuoteFormProps) {
   return (
     <form
       onSubmit={handleSubmit}
+      onFocus={markStarted}
       className="space-y-4"
       aria-label="Request a quote"
       aria-describedby={`${formId}-description`}

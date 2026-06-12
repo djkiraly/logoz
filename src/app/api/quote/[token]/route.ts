@@ -126,10 +126,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'This quote link has expired.' }, { status: 410 });
     }
 
-    // Check if quote is in SENT status (can only approve/decline sent quotes)
-    if (quote.status !== 'SENT') {
+    // A customer may approve/decline from the main quote link whether the quote
+    // is simply SENT or is in any artwork stage — as long as they have not
+    // already responded. This keeps the main link and the artwork-token flow in
+    // sync (previously an ARTWORK_* quote could not be approved here at all).
+    if (quote.approvedAt || quote.declinedAt) {
       return NextResponse.json(
-        { error: `This quote has already been ${quote.status.toLowerCase()}.` },
+        { error: 'You have already responded to this quote.' },
+        { status: 400 }
+      );
+    }
+
+    const respondableStatuses = ['SENT', 'ARTWORK_PENDING', 'ARTWORK_APPROVED', 'ARTWORK_DECLINED'];
+    if (!respondableStatuses.includes(quote.status)) {
+      return NextResponse.json(
+        { error: `This quote cannot be responded to in its current state (${quote.status.toLowerCase()}).` },
         { status: 400 }
       );
     }
@@ -145,8 +156,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const newStatus = action === 'approve' ? 'APPROVED' : 'DECLINED';
     const timestamp = new Date();
 
-    const updatedQuote = await prisma.quote.update({
-      where: { accessToken: token },
+    // Atomic guard against a concurrent double-submit: only the first request
+    // whose row still has no approvedAt/declinedAt wins.
+    const updateResult = await prisma.quote.updateMany({
+      where: { accessToken: token, approvedAt: null, declinedAt: null },
       data: {
         status: newStatus,
         approvedAt: action === 'approve' ? timestamp : null,
@@ -154,6 +167,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         lastModifiedAt: timestamp,
       },
     });
+
+    if (updateResult.count === 0) {
+      return NextResponse.json(
+        { error: 'You have already responded to this quote.' },
+        { status: 400 }
+      );
+    }
+
+    const updatedQuote = { status: newStatus };
 
     adminLogger.info(`Quote ${action}d by customer`, {
       quoteId: quote.id,
