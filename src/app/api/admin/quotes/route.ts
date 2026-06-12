@@ -6,6 +6,7 @@ import { Prisma } from '@prisma/client';
 import { trackEntityActivity, trackQuoteFunnelEvent } from '@/lib/analytics';
 import { logQuoteCreated } from '@/lib/quote-audit';
 import { notifyQuoteCreated } from '@/lib/notifications';
+import { quoteMutationSchema } from '@/lib/validation';
 
 // Generate a unique quote number
 async function generateQuoteNumber(): Promise<string> {
@@ -148,6 +149,16 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
+
+    // Validate monetary bounds + enum values before touching the DB.
+    const validation = quoteMutationSchema.safeParse(body);
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', code: 'VALIDATION_ERROR', details: validation.error.flatten() },
+        { status: 400 }
+      );
+    }
+
     const {
       customerId,
       customerName,
@@ -216,9 +227,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Generate quote number
-    const quoteNumber = await generateQuoteNumber();
-
     // Calculate totals
     let subtotal = new Prisma.Decimal(0);
     const processedLineItems: Prisma.QuoteLineItemCreateWithoutQuoteInput[] = [];
@@ -258,64 +266,74 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Calculate final totals
-    const discountAmount = discountType === 'PERCENTAGE'
+    // Calculate final totals (quantized to cents to avoid sub-cent drift).
+    const discountAmount = (discountType === 'PERCENTAGE'
       ? subtotal.mul(new Prisma.Decimal(discount || 0)).div(100)
-      : new Prisma.Decimal(discount || 0);
+      : new Prisma.Decimal(discount || 0)).toDecimalPlaces(2);
 
     const afterDiscount = subtotal.sub(discountAmount);
-    const taxAmount = afterDiscount.mul(new Prisma.Decimal(taxRate || 0)).div(100);
-    const shippingAmount = new Prisma.Decimal(shipping || 0);
-    const total = afterDiscount.add(taxAmount).add(shippingAmount);
+    const taxAmount = afterDiscount.mul(new Prisma.Decimal(taxRate || 0)).div(100).toDecimalPlaces(2);
+    const shippingAmount = new Prisma.Decimal(shipping || 0).toDecimalPlaces(2);
+    const total = afterDiscount.add(taxAmount).add(shippingAmount).toDecimalPlaces(2);
 
-    const quote = await prisma.quote.create({
-      data: {
-        quoteNumber,
-        customerId: resolvedCustomerId || null,
-        customerName: resolvedCustomerId ? null : customerName,
-        customerEmail: resolvedCustomerId ? null : customerEmail,
-        customerPhone: resolvedCustomerId ? null : customerPhone,
-        customerCompany: resolvedCustomerId ? null : customerCompany,
-        title: title || null,
-        notes: notes || null,
-        internalNotes: internalNotes || null,
-        validUntil: validUntil ? new Date(validUntil) : null,
-        requestedDelivery: requestedDelivery ? new Date(requestedDelivery) : null,
-        subtotal,
-        discountValue: new Prisma.Decimal(discount || 0),
-        discount: discountAmount,
-        discountType: discountType || 'FIXED',
-        tax: taxAmount,
-        taxRate: new Prisma.Decimal(taxRate || 0),
-        shipping: shippingAmount,
-        total,
-        ownerId: ownerId || user.id, // Default to current user if not specified
-        createdBy: user.id,
-        artworkRequired: artworkRequired || false,
-        lineItems: {
-          create: processedLineItems,
-        },
+    const quoteData = {
+      customerId: resolvedCustomerId || null,
+      customerName: resolvedCustomerId ? null : customerName,
+      customerEmail: resolvedCustomerId ? null : customerEmail,
+      customerPhone: resolvedCustomerId ? null : customerPhone,
+      customerCompany: resolvedCustomerId ? null : customerCompany,
+      title: title || null,
+      notes: notes || null,
+      internalNotes: internalNotes || null,
+      validUntil: validUntil ? new Date(validUntil) : null,
+      requestedDelivery: requestedDelivery ? new Date(requestedDelivery) : null,
+      subtotal: subtotal.toDecimalPlaces(2),
+      discountValue: new Prisma.Decimal(discount || 0),
+      discount: discountAmount,
+      discountType: discountType || 'FIXED',
+      tax: taxAmount,
+      taxRate: new Prisma.Decimal(taxRate || 0),
+      shipping: shippingAmount,
+      total,
+      ownerId: ownerId || user.id, // Default to current user if not specified
+      createdBy: user.id,
+      artworkRequired: artworkRequired || false,
+      lineItems: {
+        create: processedLineItems,
       },
-      include: {
-        customer: true,
-        owner: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-        lineItems: {
+    };
+
+    // Generate the quote number and create the quote, retrying on the rare
+    // race where two concurrent creates pick the same number (unique violation).
+    let quote;
+    for (let attempt = 0; ; attempt++) {
+      const quoteNumber = await generateQuoteNumber();
+      try {
+        quote = await prisma.quote.create({
+          data: { quoteNumber, ...quoteData },
           include: {
-            product: true,
-            supplier: true,
+            customer: true,
+            owner: {
+              select: { id: true, name: true, email: true },
+            },
+            lineItems: {
+              include: { product: true, supplier: true },
+              orderBy: { sortOrder: 'asc' },
+            },
           },
-          orderBy: {
-            sortOrder: 'asc',
-          },
-        },
-      },
-    });
+        });
+        break;
+      } catch (err) {
+        if (
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === 'P2002' &&
+          attempt < 4
+        ) {
+          continue; // collided on quoteNumber — regenerate and retry
+        }
+        throw err;
+      }
+    }
 
     adminLogger.info('Quote created', {
       userId: user.id,

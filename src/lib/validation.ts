@@ -95,6 +95,51 @@ export const quoteSchema = z.object({
 export type QuotePayload = z.infer<typeof quoteSchema>;
 
 /**
+ * Valid quote statuses (mirrors the Prisma QuoteStatus enum, including the
+ * order/fulfillment states). Used to validate admin quote mutations.
+ */
+export const QUOTE_STATUSES = [
+  'PENDING',
+  'REVIEWING',
+  'SENT',
+  'APPROVED',
+  'ARCHIVED',
+  'DECLINED',
+  'ARTWORK_PENDING',
+  'ARTWORK_APPROVED',
+  'ARTWORK_DECLINED',
+  'IN_PRODUCTION',
+  'FULFILLED',
+  'SHIPPED',
+  'COMPLETED',
+] as const;
+
+const quoteLineItemInput = z
+  .object({
+    name: z.string().trim().min(1, 'Line item name is required').max(300),
+    quantity: z.coerce.number().int().min(1).max(1_000_000).optional(),
+    unitPrice: z.coerce.number().min(0, 'Unit price must be ≥ 0').max(10_000_000).optional(),
+    discount: z.coerce.number().min(0, 'Discount must be ≥ 0').max(10_000_000).optional(),
+  })
+  .passthrough();
+
+/**
+ * Validation for admin quote create/update payloads. Permissive about shape
+ * (passthrough) but enforces non-negative monetary bounds and valid enum
+ * values so invalid input is rejected with a 400 rather than reaching the DB.
+ */
+export const quoteMutationSchema = z
+  .object({
+    discount: z.coerce.number().min(0, 'Discount must be ≥ 0').max(10_000_000).optional(),
+    discountType: z.enum(['FIXED', 'PERCENTAGE']).optional(),
+    taxRate: z.coerce.number().min(0, 'Tax rate must be ≥ 0').max(100, 'Tax rate must be ≤ 100').optional(),
+    shipping: z.coerce.number().min(0, 'Shipping must be ≥ 0').max(10_000_000).optional(),
+    status: z.enum(QUOTE_STATUSES).optional(),
+    lineItems: z.array(quoteLineItemInput).optional(),
+  })
+  .passthrough();
+
+/**
  * Check for potentially malicious content in user input
  * Used as an additional security layer
  */

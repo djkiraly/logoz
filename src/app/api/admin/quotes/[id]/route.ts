@@ -15,6 +15,7 @@ import {
   logQuoteDeleted,
 } from '@/lib/quote-audit';
 import { notifyQuoteStatusChange } from '@/lib/notifications';
+import { quoteMutationSchema } from '@/lib/validation';
 
 type RouteParams = {
   params: Promise<{ id: string }>;
@@ -89,10 +90,23 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
     const body = await request.json();
 
-    // Check quote exists
+    // Validate monetary bounds + enum values before touching the DB.
+    const validation = quoteMutationSchema.safeParse(body);
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', code: 'VALIDATION_ERROR', details: validation.error.flatten() },
+        { status: 400 }
+      );
+    }
+
+    // Check quote exists (include owner/customer so audit "from" values are real)
     const existingQuote = await prisma.quote.findUnique({
       where: { id },
-      include: { lineItems: true },
+      include: {
+        lineItems: true,
+        owner: { select: { name: true } },
+        customer: { select: { contactName: true, email: true } },
+      },
     });
 
     if (!existingQuote) {
@@ -208,59 +222,57 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       const currentTaxRate = taxRate !== undefined ? taxRate : Number(existingQuote.taxRate);
       const currentShipping = shipping !== undefined ? shipping : Number(existingQuote.shipping);
 
-      const discountAmount = currentDiscountType === 'PERCENTAGE'
+      const discountAmount = (currentDiscountType === 'PERCENTAGE'
         ? new Prisma.Decimal(currentSubtotal).mul(currentDiscountValue).div(100)
-        : new Prisma.Decimal(currentDiscountValue);
+        : new Prisma.Decimal(currentDiscountValue)).toDecimalPlaces(2);
 
       const afterDiscount = new Prisma.Decimal(currentSubtotal).sub(discountAmount);
-      const taxAmount = afterDiscount.mul(currentTaxRate).div(100);
-      const total = afterDiscount.add(taxAmount).add(new Prisma.Decimal(currentShipping));
+      const taxAmount = afterDiscount.mul(currentTaxRate).div(100).toDecimalPlaces(2);
+      const shippingAmount = new Prisma.Decimal(currentShipping).toDecimalPlaces(2);
+      const total = afterDiscount.add(taxAmount).add(shippingAmount).toDecimalPlaces(2);
 
-      updateData.subtotal = currentSubtotal;
+      updateData.subtotal = new Prisma.Decimal(currentSubtotal).toDecimalPlaces(2);
       updateData.discountValue = new Prisma.Decimal(currentDiscountValue);
       updateData.discount = discountAmount;
       updateData.discountType = currentDiscountType;
       updateData.tax = taxAmount;
       updateData.taxRate = new Prisma.Decimal(currentTaxRate);
-      updateData.shipping = new Prisma.Decimal(currentShipping);
+      updateData.shipping = shippingAmount;
       updateData.total = total;
     }
 
-    // Update with line items if provided
+    // When line items are replaced, do the delete + recreate + quote update in a
+    // single transaction so a mid-operation failure can't leave a quote with no
+    // line items.
     if (processedLineItems !== undefined) {
-      // Delete existing line items and create new ones
-      await prisma.quoteLineItem.deleteMany({
-        where: { quoteId: id },
-      });
-
       updateData.lineItems = {
         create: processedLineItems,
       };
     }
 
-    const quote = await prisma.quote.update({
-      where: { id },
-      data: updateData,
-      include: {
-        customer: true,
-        owner: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
+    const runUpdate = (tx: Prisma.TransactionClient) =>
+      tx.quote.update({
+        where: { id },
+        data: updateData,
+        include: {
+          customer: true,
+          owner: {
+            select: { id: true, name: true, email: true },
+          },
+          lineItems: {
+            include: { product: true, supplier: true },
+            orderBy: { sortOrder: 'asc' },
           },
         },
-        lineItems: {
-          include: {
-            product: true,
-            supplier: true,
-          },
-          orderBy: {
-            sortOrder: 'asc',
-          },
-        },
-      },
-    });
+      });
+
+    const quote =
+      processedLineItems !== undefined
+        ? await prisma.$transaction(async (tx) => {
+            await tx.quoteLineItem.deleteMany({ where: { quoteId: id } });
+            return runUpdate(tx);
+          })
+        : await runUpdate(prisma);
 
     adminLogger.info('Quote updated', {
       userId: user.id,
@@ -292,8 +304,12 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         logCustomerChanged(
           quote.id,
           quote.quoteNumber,
-          { name: existingQuote.customerName, email: existingQuote.customerEmail },
-          { name: quote.customerName, email: quote.customerEmail },
+          existingQuote.customer
+            ? { name: existingQuote.customer.contactName, email: existingQuote.customer.email }
+            : { name: existingQuote.customerName, email: existingQuote.customerEmail },
+          quote.customer
+            ? { name: quote.customer.contactName, email: quote.customer.email }
+            : { name: quote.customerName, email: quote.customerEmail },
           actor
         )
       );
@@ -305,7 +321,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         logOwnerChanged(
           quote.id,
           quote.quoteNumber,
-          existingQuote.ownerId ? { name: 'Previous Owner' } : null,
+          existingQuote.owner ? { name: existingQuote.owner.name } : null,
           quote.owner ? { name: quote.owner.name } : null,
           actor
         )

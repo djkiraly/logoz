@@ -197,11 +197,23 @@ export async function syncProductFromStandard(
         data: productData as Prisma.ProductUpdateInput,
       });
     } else {
-      // Create new product
-      product = await prisma.product.create({
-        data: productData as Prisma.ProductCreateInput,
-      });
-      created = true;
+      // Create new product; if a concurrent batch item created the same style
+      // first (unique sanmarStyleId), fall back to updating that row.
+      try {
+        product = await prisma.product.create({
+          data: productData as Prisma.ProductCreateInput,
+        });
+        created = true;
+      } catch (err) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+          product = await prisma.product.update({
+            where: { sanmarStyleId: productBasicInfo.style },
+            data: productData as Prisma.ProductUpdateInput,
+          });
+        } else {
+          throw err;
+        }
+      }
     }
 
     // Sync variant for this specific color/size

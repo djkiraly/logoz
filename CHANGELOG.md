@@ -38,6 +38,22 @@ workflows. Findings came from a workflow audit; tracked as P0/P1/P2.
 - Configure `next.config.ts` `images.remotePatterns` for `cdnm.sanmar.com` and
   `cdn.sanmar.com` so synced SanMar product images render via `next/image`.
 
+### Validation & data integrity
+- Validate admin quote create/update payloads with a Zod schema
+  (`quoteMutationSchema`): non-negative bounds on discount/taxRate/shipping and
+  per-line unitPrice/quantity/discount, plus valid `status`/`discountType`
+  enums — invalid input now returns 400 instead of reaching the database.
+- Quantize all derived quote money (subtotal, discount, tax, total) to two
+  decimal places to avoid sub-cent drift in `@db.Money` columns.
+- `generateQuoteNumber` create path retries on a unique-constraint collision so
+  concurrent quote creation can't 500 on a duplicate quote number.
+- Wrap the quote update's line-item delete + recreate + update in a single
+  transaction so a mid-operation failure can't leave a quote with no line items.
+- SanMar product create is now idempotent under concurrency (falls back to
+  update on a unique `sanmarStyleId` collision).
+- Fix audit "from/to" values for owner and customer changes (previously logged
+  the literal "Previous Owner" and a just-nulled customer name).
+
 ### SanMar sync robustness
 - Honor the `dryRun`, `updateExisting`, and `markupPercent` sync options that
   the API accepted but `product-sync.ts` ignored: `dryRun` previews without
