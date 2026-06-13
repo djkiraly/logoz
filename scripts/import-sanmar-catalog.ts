@@ -17,6 +17,9 @@
  * The file is huge, so it is streamed — memory stays flat regardless of size.
  */
 
+// Mark as a module so top-level names don't collide with other scripts.
+export {};
+
 // Load .env so the standalone process has DATABASE_URL (Next.js does this for
 // the app, but a bare tsx process does not). Node >=20.12 / 22 built-in.
 try {
