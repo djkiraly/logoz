@@ -22,6 +22,7 @@ import {
   ArrowDown,
   ArrowUpDown,
   Calculator,
+  RefreshCw,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -38,6 +39,7 @@ type Category = {
   id: string;
   slug: string;
   title: string;
+  _count?: { products: number };
 };
 
 type Supplier = {
@@ -151,26 +153,30 @@ export default function ProductsPage() {
 
   const hasActiveFilters = !!search || !!categoryFilter || !!supplierFilter || visibilityFilter !== 'all';
 
-  // Load the filter dropdown sources once.
-  useEffect(() => {
-    const fetchFilters = async () => {
-      try {
-        const [categoriesRes, suppliersRes] = await Promise.all([
-          fetch('/api/admin/categories'),
-          fetch('/api/admin/vendors'),
-        ]);
-        const [categoriesData, suppliersData] = await Promise.all([
-          categoriesRes.json(),
-          suppliersRes.json(),
-        ]);
-        if (categoriesData.ok) setCategories(categoriesData.data);
-        if (suppliersData.ok) setSuppliers(suppliersData.data);
-      } catch (error) {
-        console.error('Failed to fetch filters:', error);
-      }
-    };
-    fetchFilters();
+  // Load the filter dropdown sources (+ per-category counts). Re-run after
+  // product changes so the counters stay accurate.
+  const fetchFilters = useCallback(async () => {
+    try {
+      const [categoriesRes, suppliersRes] = await Promise.all([
+        fetch('/api/admin/categories'),
+        fetch('/api/admin/vendors'),
+      ]);
+      const [categoriesData, suppliersData] = await Promise.all([
+        categoriesRes.json(),
+        suppliersRes.json(),
+      ]);
+      if (categoriesData.ok) setCategories(categoriesData.data);
+      if (suppliersData.ok) setSuppliers(suppliersData.data);
+    } catch (error) {
+      console.error('Failed to fetch filters:', error);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchFilters();
+  }, [fetchFilters]);
+
+  const totalProductCount = categories.reduce((sum, c) => sum + (c._count?.products ?? 0), 0);
 
   // Debounce the search box, and reset to page 1 when the query changes.
   useEffect(() => {
@@ -424,6 +430,7 @@ export default function ProductsPage() {
       });
       closeModal();
       fetchProducts();
+      fetchFilters();
     } catch (error) {
       setMessage({
         type: 'error',
@@ -448,6 +455,7 @@ export default function ProductsPage() {
       setMessage({ type: 'success', text: 'Product deleted successfully!' });
       setDeleteConfirm(null);
       fetchProducts();
+      fetchFilters();
     } catch (error) {
       setMessage({
         type: 'error',
@@ -565,6 +573,54 @@ export default function ProductsPage() {
             <AlertCircle className="w-5 h-5" />
           )}
           {message.text}
+        </div>
+      )}
+
+      {/* Per-category counters */}
+      {categories.length > 0 && (
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-sm text-slate-400">
+              Products by category
+              <span className="ml-2 text-slate-500">· {totalProductCount} total</span>
+            </p>
+            <button
+              onClick={fetchFilters}
+              className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-white transition-colors"
+              title="Refresh counts"
+            >
+              <RefreshCw className="h-3 w-3" />
+              Refresh
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <button
+              onClick={() => { setCategoryFilter(''); setPage(1); }}
+              className={`rounded-xl border p-3 text-left transition-colors ${
+                categoryFilter === ''
+                  ? 'border-cyan-500/40 bg-cyan-500/10'
+                  : 'border-white/10 bg-white/5 hover:bg-white/10'
+              }`}
+            >
+              <p className="text-2xl font-bold text-white">{totalProductCount}</p>
+              <p className="truncate text-xs text-slate-400">All products</p>
+            </button>
+            {categories.map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => { setCategoryFilter(cat.id); setPage(1); }}
+                className={`rounded-xl border p-3 text-left transition-colors ${
+                  categoryFilter === cat.id
+                    ? 'border-cyan-500/40 bg-cyan-500/10'
+                    : 'border-white/10 bg-white/5 hover:bg-white/10'
+                }`}
+                title={cat.title}
+              >
+                <p className="text-2xl font-bold text-white">{cat._count?.products ?? 0}</p>
+                <p className="truncate text-xs text-slate-400">{cat.title}</p>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
