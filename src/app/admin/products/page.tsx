@@ -150,6 +150,7 @@ export default function ProductsPage() {
   const [pageSize, setPageSize] = useState(25);
   const [pagination, setPagination] = useState<Pagination>({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
   const [isRecalculating, setIsRecalculating] = useState(false);
+  const [isBulkUpdating, setIsBulkUpdating] = useState(false);
 
   const hasActiveFilters = !!search || !!categoryFilter || !!supplierFilter || visibilityFilter !== 'all';
 
@@ -366,6 +367,43 @@ export default function ProductsPage() {
       ...prev,
       gallery: prev.gallery.filter((_, i) => i !== index),
     }));
+  };
+
+  const handleBulkVisibility = async (visible: boolean) => {
+    const action = visible ? 'Publish' : 'Hide';
+    const scope = hasActiveFilters ? 'matching the current filters' : 'in the catalog';
+    if (!window.confirm(
+      `${action} all ${pagination.total} product(s) ${scope}? This affects every match, not just this page.`
+    )) {
+      return;
+    }
+    setIsBulkUpdating(true);
+    setMessage(null);
+    try {
+      const response = await fetch('/api/admin/products/bulk-visibility', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          visible,
+          search,
+          categoryId: categoryFilter || undefined,
+          supplierId: supplierFilter || undefined,
+          visibility: visibilityFilter,
+        }),
+      });
+      const data = await response.json();
+      if (data.ok) {
+        setMessage({ type: 'success', text: `${visible ? 'Published' : 'Hid'} ${data.data.updated} product(s).` });
+        fetchProducts();
+        fetchFilters();
+      } else {
+        throw new Error(data.error || `Failed to ${action.toLowerCase()} products`);
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Bulk update failed' });
+    } finally {
+      setIsBulkUpdating(false);
+    }
   };
 
   const handleRecalculatePrices = async () => {
@@ -680,6 +718,32 @@ export default function ProductsPage() {
           ))}
         </select>
       </div>
+
+      {/* Bulk publish / hide (acts on everything matching the current filters) */}
+      {pagination.total > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+          <span className="text-sm text-slate-400">
+            {hasActiveFilters ? `${pagination.total} matching` : `${pagination.total} total`}
+            {' · bulk:'}
+          </span>
+          <button
+            onClick={() => handleBulkVisibility(true)}
+            disabled={isBulkUpdating}
+            className="inline-flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/15 px-3 py-1.5 text-sm text-green-300 transition-colors hover:bg-green-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isBulkUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
+            Publish all{hasActiveFilters ? ' matching' : ''} ({pagination.total})
+          </button>
+          <button
+            onClick={() => handleBulkVisibility(false)}
+            disabled={isBulkUpdating}
+            className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-slate-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <EyeOff className="h-4 w-4" />
+            Hide all{hasActiveFilters ? ' matching' : ''} ({pagination.total})
+          </button>
+        </div>
+      )}
 
       {/* Products List */}
       {!isLoading && products.length === 0 ? (

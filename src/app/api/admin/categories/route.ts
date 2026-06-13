@@ -24,7 +24,17 @@ export async function GET() {
       },
     });
 
-    return NextResponse.json({ ok: true, data: categories });
+    // Add a variant ("items") count per category for the admin list.
+    const withCounts = await Promise.all(
+      categories.map(async (c) => ({
+        ...c,
+        variantCount: await prisma.variant.count({
+          where: { product: { categoryId: c.id } },
+        }),
+      }))
+    );
+
+    return NextResponse.json({ ok: true, data: withCounts });
   } catch (error) {
     adminLogger.error('Failed to fetch categories', {
       error: error instanceof Error ? error.message : String(error),
@@ -50,7 +60,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { title, description, imageUrl, featured, markupPercent } = body;
+    const { title, description, imageUrl, featured, markupPercent, active } = body;
 
     if (!title?.trim()) {
       return NextResponse.json({ error: 'Title is required' }, { status: 400 });
@@ -82,6 +92,7 @@ export async function POST(request: NextRequest) {
         description: description?.trim() || '',
         imageUrl: imageUrl || null,
         featured: featured || false,
+        active: active ?? true,
         markupPercent:
           markupPercent === undefined || markupPercent === null || markupPercent === ''
             ? null

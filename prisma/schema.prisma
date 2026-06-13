@@ -124,6 +124,7 @@ model Category {
   title       String
   description String
   featured    Boolean    @default(false)
+  active      Boolean    @default(true)
   imageUrl    String?
   markupPercent Float?
   products    Product[]

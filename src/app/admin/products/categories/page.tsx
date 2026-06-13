@@ -14,6 +14,8 @@ import {
   Package,
   Upload,
   Image as ImageIcon,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -24,7 +26,9 @@ type Category = {
   description: string;
   imageUrl: string | null;
   featured: boolean;
+  active: boolean;
   markupPercent: number | null;
+  variantCount?: number;
   _count: {
     products: number;
   };
@@ -35,6 +39,7 @@ type CategoryFormData = {
   description: string;
   imageUrl: string | null;
   featured: boolean;
+  active: boolean;
   markupPercent: string;
 };
 
@@ -43,6 +48,7 @@ const emptyCategory: CategoryFormData = {
   description: '',
   imageUrl: null,
   featured: false,
+  active: true,
   markupPercent: '',
 };
 
@@ -126,6 +132,7 @@ export default function CategoriesPage() {
       description: category.description,
       imageUrl: category.imageUrl,
       featured: category.featured,
+      active: category.active,
       markupPercent: category.markupPercent != null ? String(category.markupPercent) : '',
     });
     setIsModalOpen(true);
@@ -271,6 +278,31 @@ export default function CategoriesPage() {
     }
   };
 
+  const toggleActive = async (category: Category) => {
+    try {
+      const response = await fetch(`/api/admin/categories/${category.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: !category.active }),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to update category');
+      }
+      setMessage({
+        type: 'success',
+        text: category.active
+          ? 'Category deactivated (hidden from storefront)'
+          : 'Category activated',
+      });
+      fetchCategories();
+    } catch (error) {
+      setMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : 'Failed to update category',
+      });
+    }
+  };
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
@@ -403,8 +435,10 @@ export default function CategoriesPage() {
                 <th className="text-left p-4 text-sm font-medium text-slate-400">Category</th>
                 <th className="text-left p-4 text-sm font-medium text-slate-400">Slug</th>
                 <th className="text-left p-4 text-sm font-medium text-slate-400">Products</th>
+                <th className="text-left p-4 text-sm font-medium text-slate-400">Items</th>
                 <th className="text-left p-4 text-sm font-medium text-slate-400">Markup</th>
                 <th className="text-left p-4 text-sm font-medium text-slate-400">Featured</th>
+                <th className="text-left p-4 text-sm font-medium text-slate-400">Active</th>
                 <th className="text-right p-4 text-sm font-medium text-slate-400">Actions</th>
               </tr>
             </thead>
@@ -441,6 +475,9 @@ export default function CategoriesPage() {
                     <span className="text-slate-300">{category._count.products}</span>
                   </td>
                   <td className="p-4">
+                    <span className="text-slate-400">{(category.variantCount ?? 0).toLocaleString()}</span>
+                  </td>
+                  <td className="p-4">
                     {category.markupPercent != null ? (
                       <span className="text-slate-300">{category.markupPercent}%</span>
                     ) : (
@@ -460,6 +497,29 @@ export default function CategoriesPage() {
                       <Star
                         className={`w-4 h-4 ${category.featured ? 'fill-yellow-500' : ''}`}
                       />
+                    </button>
+                  </td>
+                  <td className="p-4">
+                    <button
+                      onClick={() => toggleActive(category)}
+                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                        category.active
+                          ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
+                          : 'bg-slate-500/20 text-slate-400 hover:bg-slate-500/30'
+                      }`}
+                      title={category.active ? 'Deactivate (hide from storefront)' : 'Activate'}
+                    >
+                      {category.active ? (
+                        <>
+                          <Eye className="w-3 h-3" />
+                          Active
+                        </>
+                      ) : (
+                        <>
+                          <EyeOff className="w-3 h-3" />
+                          Hidden
+                        </>
+                      )}
                     </button>
                   </td>
                   <td className="p-4">
@@ -664,6 +724,23 @@ export default function CategoriesPage() {
                   <span className="text-sm font-medium text-slate-300">Featured Category</span>
                   <p className="text-xs text-slate-500">
                     Featured categories appear prominently on the storefront
+                  </p>
+                </div>
+              </label>
+
+              {/* Active */}
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="active"
+                  checked={formData.active}
+                  onChange={handleCheckboxChange}
+                  className="w-4 h-4 rounded border-white/20 bg-white/5 text-cyan-500 focus:ring-cyan-500/50"
+                />
+                <div>
+                  <span className="text-sm font-medium text-slate-300">Active</span>
+                  <p className="text-xs text-slate-500">
+                    Inactive categories are hidden from the storefront, even if they have visible products
                   </p>
                 </div>
               </label>
