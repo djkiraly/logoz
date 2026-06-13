@@ -271,6 +271,32 @@ export function mapStyleRows(rows: Row[]): MappedStyle | null {
   };
 }
 
+/**
+ * Merge two per-color image sets (union by color), preferring existing non-null
+ * fields and filling gaps from the incoming set. Used to accumulate imagery
+ * across a style's non-contiguous blocks on re-import.
+ */
+function mergeColorImages(existing: ColorImageSet[], incoming: ColorImageSet[]): ColorImageSet[] {
+  const byColor = new Map<string, ColorImageSet>();
+  for (const c of existing) byColor.set(c.color, c);
+  for (const c of incoming) {
+    const prev = byColor.get(c.color);
+    if (!prev) {
+      byColor.set(c.color, c);
+    } else {
+      byColor.set(c.color, {
+        color: c.color,
+        swatch: prev.swatch ?? c.swatch,
+        front: prev.front ?? c.front,
+        back: prev.back ?? c.back,
+        frontFlat: prev.frontFlat ?? c.frontFlat,
+        backFlat: prev.backFlat ?? c.backFlat,
+      });
+    }
+  }
+  return Array.from(byColor.values());
+}
+
 /** Build the per-color image sets for a style's rows (first row wins per color). */
 function buildColorImages(rows: Row[]): ColorImageSet[] {
   const byColor = new Map<string, ColorImageSet>();
@@ -335,10 +361,12 @@ async function importStyle(
     lastSyncedAt: new Date(),
   };
 
-  // Find-then-write so we can preserve a manually-set public price.
+  // Find-then-write so we can preserve a manually-set public price and MERGE
+  // imagery across blocks (the catalog is not strictly style-sorted, so a
+  // style's rows arrive in several non-contiguous blocks).
   const existing = await prisma.product.findUnique({
     where: { sanmarStyleId: mapped.style },
-    select: { id: true, priceOverridden: true },
+    select: { id: true, priceOverridden: true, colorImages: true, gallery: true, heroImageUrl: true },
   });
 
   let productId: string;
@@ -346,8 +374,22 @@ async function importStyle(
     // On re-import, refresh catalog fields but preserve admin curation
     // (visible, category, supplier). When the price has been manually
     // overridden, leave basePrice untouched too.
+    //
+    // Merge imagery so colors from earlier blocks aren't lost when a later
+    // block of the same style is processed.
+    const existingColorImages = (existing.colorImages as ColorImageSet[] | null) ?? [];
+    const mergedColorImages = mergeColorImages(existingColorImages, mapped.colorImages);
+    const mergedGallery = dedupe([...(existing.gallery ?? []), ...mapped.gallery]);
+    const heroImageUrl = existing.heroImageUrl ?? mapped.heroImageUrl;
+
     const { basePrice, ...rest } = catalogData;
-    const updateData = existing.priceOverridden ? rest : { ...rest, basePrice };
+    const merged = {
+      ...rest,
+      colorImages: mergedColorImages as unknown as Prisma.InputJsonValue,
+      gallery: mergedGallery,
+      heroImageUrl,
+    };
+    const updateData = existing.priceOverridden ? merged : { ...merged, basePrice };
     const updated = await prisma.product.update({
       where: { id: existing.id },
       data: updateData,

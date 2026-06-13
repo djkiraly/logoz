@@ -173,7 +173,7 @@ export type PublicProductDetail = {
   productStatus: string;
   featured: boolean;
   category: { title: string; slug: string } | null;
-  supplier: { name: string } | null;
+  supplier: { name: string; logoUrl: string | null } | null;
   colors: string[];
   sizes: string[];
 };
@@ -232,7 +232,7 @@ export const getProductBySku = cache(async (sku: string): Promise<PublicProductD
         productStatus: true,
         featured: true,
         category: { select: { title: true, slug: true } },
-        supplier: { select: { name: true } },
+        supplier: { select: { name: true, logoUrl: true, sanmarBrandLogoUrl: true } },
         variants: { select: { color: true, size: true } },
       },
     });
@@ -259,7 +259,12 @@ export const getProductBySku = cache(async (sku: string): Promise<PublicProductD
       productStatus: product.productStatus,
       featured: product.featured,
       category: product.category,
-      supplier: product.supplier,
+      supplier: product.supplier
+        ? {
+            name: product.supplier.name,
+            logoUrl: product.supplier.logoUrl ?? product.supplier.sanmarBrandLogoUrl ?? null,
+          }
+        : null,
       colors,
       sizes,
     };

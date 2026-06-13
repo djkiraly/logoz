@@ -78,7 +78,17 @@ export default async function ProductDetailPage({ params }: PageProps) {
               )}
               <h1 className="text-3xl font-semibold text-white">{product.name}</h1>
               {product.supplier && (
-                <p className="text-sm text-white/60">by {product.supplier.name}</p>
+                <div className="flex items-center gap-2">
+                  {product.supplier.logoUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={product.supplier.logoUrl}
+                      alt={product.supplier.name}
+                      className="h-6 w-auto max-w-[140px] object-contain"
+                    />
+                  )}
+                  <p className="text-sm text-white/60">by {product.supplier.name}</p>
+                </div>
               )}
             </div>
 
