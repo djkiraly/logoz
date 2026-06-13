@@ -97,6 +97,9 @@ export const getCategories = cache(async () =>
   loadOrFallback(
     () =>
       prisma.category.findMany({
+        // Public pages only show categories that have at least one visible
+        // product, so empty/hidden-only categories don't appear in nav/filters.
+        where: { products: { some: { visible: true } } },
         include: { services: true },
         orderBy: { title: 'asc' },
       }),
