@@ -372,8 +372,15 @@ async function importStyle(
     summary.productsCreated += 1;
   }
 
+  // Dedupe rows that resolve to the same (color, size) within this style — dirty
+  // catalogs can repeat them — so there's exactly one write per variant.
+  const uniqueVariants = new Map<string, MappedStyle['variants'][number]>();
+  for (const v of mapped.variants) {
+    uniqueVariants.set(`${v.color} ${v.size}`, v);
+  }
+
   // Upsert all variants for this style in one transaction.
-  const variantUpserts = mapped.variants.map((v) => {
+  const variantUpserts = Array.from(uniqueVariants.values()).map((v) => {
     const { color, size, ...data } = v;
     return prisma.variant.upsert({
       where: { productId_color_size: { productId, color, size } },

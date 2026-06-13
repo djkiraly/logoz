@@ -721,7 +721,10 @@ model Variant {
   salePrice          Decimal? @db.Money
   sanmarCatalogColor String?
   sanmarPartId       String?
-  sanmarUniqueKey    String?  @unique
+  // NOT unique: SanMar UNIQUE_KEY can be duplicated/corrupted in catalog
+  // exports, and a global unique here would fail a whole style's variant
+  // transaction. Variant identity is (productId, color, size).
+  sanmarUniqueKey    String?
   product            Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@unique([productId, color, size])
