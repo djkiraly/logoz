@@ -1,8 +1,5 @@
-'use client';
-
-import { useState, useMemo } from 'react';
 import Link from 'next/link';
-import { Filter, X } from 'lucide-react';
+import { Filter } from 'lucide-react';
 
 type Category = {
   id: string;
@@ -27,115 +24,129 @@ type Product = {
 };
 
 type ProductFilterProps = {
+  /** Products for the current page (already filtered + paginated server-side). */
   products: Product[];
   categories: Category[];
+  /** Slug of the active category, or null for "All Products". */
+  selectedSlug: string | null;
+  page: number;
+  totalPages: number;
+  /** Total matching products across all pages (for the results count). */
+  total: number;
 };
 
-export function ProductFilter({ products, categories }: ProductFilterProps) {
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+/** Build a /products href preserving category, omitting defaults (page 1 / all). */
+function buildHref(slug: string | null, page: number): string {
+  const params = new URLSearchParams();
+  if (slug) params.set('category', slug);
+  if (page > 1) params.set('page', String(page));
+  const qs = params.toString();
+  return qs ? `/products?${qs}` : '/products';
+}
 
-  const filteredProducts = useMemo(() => {
-    if (!selectedCategory) {
-      return products;
-    }
-    return products.filter((product) => {
-      const categoryId = product.categoryId || product.category?.id;
-      return categoryId === selectedCategory;
-    });
-  }, [products, selectedCategory]);
+/** Compact page-number window around the current page (with first/last). */
+function pageWindow(current: number, totalPages: number): (number | 'gap')[] {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, i) => i + 1);
+  }
+  const pages = new Set<number>([1, totalPages, current]);
+  for (let d = 1; d <= 1; d++) {
+    if (current - d > 1) pages.add(current - d);
+    if (current + d < totalPages) pages.add(current + d);
+  }
+  const sorted = Array.from(pages).sort((a, b) => a - b);
+  const out: (number | 'gap')[] = [];
+  let prev = 0;
+  for (const p of sorted) {
+    if (prev && p - prev > 1) out.push('gap');
+    out.push(p);
+    prev = p;
+  }
+  return out;
+}
 
-  const formatPrice = (price: Product['basePrice']) => {
-    if (!price) return '0.00';
-    if (typeof price === 'number') {
-      return price.toFixed(2);
-    }
-    if (typeof price === 'string') {
-      return Number(price).toFixed(2);
-    }
-    return price.toString();
-  };
+function formatPrice(price: Product['basePrice']): string {
+  if (!price) return '0.00';
+  if (typeof price === 'number') return price.toFixed(2);
+  if (typeof price === 'string') return Number(price).toFixed(2);
+  return price.toString();
+}
 
+export function ProductFilter({
+  products,
+  categories,
+  selectedSlug,
+  page,
+  totalPages,
+  total,
+}: ProductFilterProps) {
   // Don't render if there are no products and no categories
   if (products.length === 0 && categories.length === 0) {
     return null;
   }
 
+  const pillClass = (active: boolean) =>
+    `px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+      active
+        ? 'bg-cyan-500 text-white'
+        : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white border border-white/10'
+    }`;
+
   return (
     <section className="px-4 py-12">
       <div className="mx-auto max-w-6xl space-y-6">
-        {/* Header */}
+        {/* Heading */}
         <div className="flex flex-col gap-2">
           <p className="text-xs uppercase tracking-[0.3em] text-white/60">Catalog</p>
           <h2 className="text-2xl font-semibold text-white sm:text-3xl">
-            Fresh drops & program staples
+            Browse Products
           </h2>
           <p className="text-base text-white/70">
-            Mix made-to-order and stocked inventory. Sync pricing with suppliers automatically.
+            Filter by category to find exactly what you need.
           </p>
         </div>
 
-        {/* Category Filter */}
+        {/* Category Filters */}
         {categories.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-2 text-sm text-white/60 mr-2">
               <Filter className="w-4 h-4" />
-              <span>Filter:</span>
             </div>
-            <button
-              onClick={() => setSelectedCategory(null)}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
-                selectedCategory === null
-                  ? 'bg-cyan-500 text-white'
-                  : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white border border-white/10'
-              }`}
-            >
+            <Link href={buildHref(null, 1)} className={pillClass(selectedSlug === null)}>
               All Products
-            </button>
+            </Link>
             {categories.map((category) => (
-              <button
+              <Link
                 key={category.id}
-                onClick={() => setSelectedCategory(category.id)}
-                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
-                  selectedCategory === category.id
-                    ? 'bg-cyan-500 text-white'
-                    : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white border border-white/10'
-                }`}
+                href={buildHref(category.slug, 1)}
+                className={pillClass(selectedSlug === category.slug)}
               >
                 {category.title}
-              </button>
+              </Link>
             ))}
-            {selectedCategory && (
-              <button
-                onClick={() => setSelectedCategory(null)}
-                className="p-1.5 rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-colors"
-                title="Clear filter"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
           </div>
         )}
 
         {/* Products Grid */}
-        {filteredProducts.length === 0 ? (
+        {products.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-white/60">
-              {selectedCategory
+              {selectedSlug
                 ? 'No products found in this category.'
                 : 'No products available yet.'}
             </p>
-            {selectedCategory && (
-              <button
-                onClick={() => setSelectedCategory(null)}
-                className="mt-4 px-4 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors"
+            {selectedSlug && (
+              <Link
+                href={buildHref(null, 1)}
+                className="mt-4 inline-block px-4 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors"
               >
                 View all products
-              </button>
+              </Link>
             )}
           </div>
         ) : (
           <div className="grid gap-5 md:grid-cols-3">
-            {filteredProducts.map((product) => (
+            {products.map((product) => (
               <Link
                 key={product.sku}
                 href={`/products/${encodeURIComponent(product.sku)}`}
@@ -179,13 +190,65 @@ export function ProductFilter({ products, categories }: ProductFilterProps) {
           </div>
         )}
 
-        {/* Results count */}
-        {filteredProducts.length > 0 && (
-          <p className="text-center text-sm text-white/40">
-            Showing {filteredProducts.length} of {products.length} products
-            {selectedCategory && (
-              <> in selected category</>
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <nav
+            className="flex flex-wrap items-center justify-center gap-2 pt-2"
+            aria-label="Pagination"
+          >
+            {page > 1 ? (
+              <Link
+                href={buildHref(selectedSlug, page - 1)}
+                className="px-3 py-1.5 rounded-full text-sm font-medium bg-white/5 text-white/70 hover:bg-white/10 hover:text-white border border-white/10 transition-all"
+                rel="prev"
+              >
+                Prev
+              </Link>
+            ) : (
+              <span className="px-3 py-1.5 rounded-full text-sm font-medium bg-white/5 text-white/30 border border-white/10 cursor-not-allowed">
+                Prev
+              </span>
             )}
+
+            {pageWindow(page, totalPages).map((p, i) =>
+              p === 'gap' ? (
+                <span key={`gap-${i}`} className="px-2 text-white/40">
+                  …
+                </span>
+              ) : (
+                <Link
+                  key={p}
+                  href={buildHref(selectedSlug, p)}
+                  aria-current={p === page ? 'page' : undefined}
+                  className={pillClass(p === page)}
+                >
+                  {p}
+                </Link>
+              )
+            )}
+
+            {page < totalPages ? (
+              <Link
+                href={buildHref(selectedSlug, page + 1)}
+                className="px-3 py-1.5 rounded-full text-sm font-medium bg-white/5 text-white/70 hover:bg-white/10 hover:text-white border border-white/10 transition-all"
+                rel="next"
+              >
+                Next
+              </Link>
+            ) : (
+              <span className="px-3 py-1.5 rounded-full text-sm font-medium bg-white/5 text-white/30 border border-white/10 cursor-not-allowed">
+                Next
+              </span>
+            )}
+          </nav>
+        )}
+
+        {/* Results count */}
+        {total > 0 && (
+          <p className="text-center text-sm text-white/40">
+            Showing {products.length} of {total} products
+            {selectedSlug && <> in selected category</>}
+            {totalPages > 1 && <> · page {page} of {totalPages}</>}
           </p>
         )}
       </div>

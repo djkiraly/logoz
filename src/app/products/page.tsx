@@ -1,8 +1,20 @@
+import Link from 'next/link';
 import { ProductFilter } from '@/components/sections/product-filter';
-import { getCategories, getAllProducts } from '@/lib/site-data';
+import { getCategories, getVisibleProductsPage } from '@/lib/site-data';
 
-export default async function ProductsPage() {
-  const [products, categories] = await Promise.all([getAllProducts(), getCategories()]);
+type ProductsPageProps = {
+  searchParams: Promise<{ category?: string; page?: string }>;
+};
+
+export default async function ProductsPage({ searchParams }: ProductsPageProps) {
+  const { category, page: pageParam } = await searchParams;
+  const selectedSlug = category ?? null;
+  const page = Number.parseInt(pageParam ?? '1', 10) || 1;
+
+  const [pageData, categories] = await Promise.all([
+    getVisibleProductsPage(selectedSlug, page),
+    getCategories(),
+  ]);
 
   // Transform categories to include id for filtering
   const categoriesWithId = categories.map((cat) => ({
@@ -14,8 +26,8 @@ export default async function ProductsPage() {
     featured: cat.featured,
   }));
 
-  // Transform products to include categoryId for filtering and convert Decimal to number
-  const productsWithCategoryId = products.map((product) => ({
+  // Transform products to include categoryId and convert Decimal to number
+  const productsWithCategoryId = pageData.products.map((product) => ({
     ...product,
     categoryId: product.categoryId || product.category?.id,
     basePrice: product.basePrice ? Number(product.basePrice) : 0,
@@ -39,9 +51,10 @@ export default async function ProductsPage() {
               .filter((cat) => cat.featured)
               .slice(0, 3)
               .map((category) => (
-                <article
+                <Link
                   key={category.slug}
-                  className="group rounded-3xl border border-white/10 bg-white/5 overflow-hidden text-left hover:bg-white/10 transition-colors cursor-pointer"
+                  href={`/products?category=${encodeURIComponent(category.slug)}`}
+                  className="group block rounded-3xl border border-white/10 bg-white/5 overflow-hidden text-left hover:bg-white/10 transition-colors"
                 >
                   {category.imageUrl && (
                     <div className="aspect-[16/9] overflow-hidden">
@@ -57,14 +70,21 @@ export default async function ProductsPage() {
                     <p className="mt-2 text-sm text-white/70 line-clamp-2">{category.description}</p>
                     <div className="mt-4 text-sm font-semibold text-cyan-400">View products →</div>
                   </div>
-                </article>
+                </Link>
               ))}
           </div>
         )}
       </div>
 
       {/* Products with Filter */}
-      <ProductFilter products={productsWithCategoryId} categories={categoriesWithId} />
+      <ProductFilter
+        products={productsWithCategoryId}
+        categories={categoriesWithId}
+        selectedSlug={selectedSlug}
+        page={pageData.page}
+        totalPages={pageData.totalPages}
+        total={pageData.total}
+      />
     </div>
   );
 }

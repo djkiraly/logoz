@@ -152,23 +152,59 @@ export const getProducts = cache(async () =>
   ),
 );
 
-// Full set of visible products for the /products catalog page. The page filters
-// by category client-side, so it needs the complete list (no take cap).
-export const getAllProducts = cache(async () =>
-  loadOrFallback(
-    () =>
-      prisma.product.findMany({
-        where: { visible: true },
-        // Never expose supplier cost on public pages.
-        omit: { cost: true },
-        include: { category: true, supplier: true },
-        orderBy: [
-          { featured: 'desc' },
-          { createdAt: 'desc' },
-        ],
-      }),
-    fallback.products,
-  ),
+/** Products shown per page on the public /products catalog. */
+export const PRODUCTS_PER_PAGE = 24;
+
+/**
+ * One page of visible products for the /products catalog, filtered + paginated
+ * in the database so the page payload stays bounded as the catalog grows.
+ * `categorySlug` is null/empty for "all". Returns the slice plus the totals the
+ * UI needs to render pagination controls. Never exposes supplier cost.
+ */
+export const getVisibleProductsPage = cache(
+  async (categorySlug: string | null, page: number) => {
+    const perPage = PRODUCTS_PER_PAGE;
+    const safePage = Math.max(1, Number.isFinite(page) ? Math.floor(page) : 1);
+    const where = {
+      visible: true,
+      ...(categorySlug ? { category: { slug: categorySlug } } : {}),
+    };
+
+    return loadOrFallback(
+      async () => {
+        const [products, total] = await Promise.all([
+          prisma.product.findMany({
+            where,
+            // Never expose supplier cost on public pages.
+            omit: { cost: true },
+            include: { category: true, supplier: true },
+            orderBy: [
+              { featured: 'desc' },
+              { createdAt: 'desc' },
+            ],
+            skip: (safePage - 1) * perPage,
+            take: perPage,
+          }),
+          prisma.product.count({ where }),
+        ]);
+        return {
+          products,
+          total,
+          page: safePage,
+          perPage,
+          totalPages: Math.max(1, Math.ceil(total / perPage)),
+        };
+      },
+      {
+        products: fallback.products.slice(0, perPage),
+        total: fallback.products.length,
+        page: safePage,
+        perPage,
+        totalPages: Math.max(1, Math.ceil(fallback.products.length / perPage)),
+      },
+      'getVisibleProductsPage',
+    );
+  },
 );
 
 export type PublicColorImage = {
