@@ -15,12 +15,16 @@ export interface SupplierMappingResult {
 
 // Cache for supplier mappings to reduce DB queries during sync
 const supplierCache = new Map<string, string>();
+// Brands whose Supplier already has a brand logo, so we skip redundant backfill
+// writes once we've confirmed (or set) one during this run.
+const suppliersWithLogo = new Set<string>();
 
 /**
  * Clear the supplier cache (call when starting a new sync)
  */
 export function clearSupplierCache(): void {
   supplierCache.clear();
+  suppliersWithLogo.clear();
 }
 
 /**
@@ -69,6 +73,15 @@ export async function getOrCreateSupplier(
   // Check cache first
   const cachedId = supplierCache.get(normalizedBrand);
   if (cachedId) {
+    // The first row for a brand may not carry its logo; a later row might.
+    // Backfill it (only where still missing) so the logo isn't lost to caching.
+    if (brandLogoUrl && !suppliersWithLogo.has(normalizedBrand)) {
+      await prisma.supplier.updateMany({
+        where: { id: cachedId, sanmarBrandLogoUrl: null },
+        data: { sanmarBrandLogoUrl: brandLogoUrl },
+      });
+      suppliersWithLogo.add(normalizedBrand);
+    }
     return { supplierId: cachedId, created: false, brandName: normalizedBrand };
   }
 
@@ -98,7 +111,18 @@ export async function getOrCreateSupplier(
         });
       }
 
+      // Backfill the brand logo even for an already-mapped supplier — the gate
+      // above is skipped on re-import, so without this an existing supplier that
+      // first came in logo-less would never get one.
+      if (brandLogoUrl && !supplier.sanmarBrandLogoUrl) {
+        supplier = await prisma.supplier.update({
+          where: { id: supplier.id },
+          data: { sanmarBrandLogoUrl: brandLogoUrl },
+        });
+      }
+
       supplierCache.set(normalizedBrand, supplier.id);
+      if (supplier.sanmarBrandLogoUrl) suppliersWithLogo.add(normalizedBrand);
       return { supplierId: supplier.id, created: false, brandName: normalizedBrand };
     }
 
@@ -116,6 +140,7 @@ export async function getOrCreateSupplier(
     });
 
     supplierCache.set(normalizedBrand, supplier.id);
+    if (supplier.sanmarBrandLogoUrl) suppliersWithLogo.add(normalizedBrand);
 
     adminLogger.info('Created SanMar supplier', {
       supplierId: supplier.id,

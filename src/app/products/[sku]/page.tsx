@@ -80,12 +80,16 @@ export default async function ProductDetailPage({ params }: PageProps) {
               {product.supplier && (
                 <div className="flex items-center gap-2">
                   {product.supplier.logoUrl && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={product.supplier.logoUrl}
-                      alt={product.supplier.name}
-                      className="h-6 w-auto max-w-[140px] object-contain"
-                    />
+                    // White chip so dark/transparent brand logos stay visible on
+                    // the dark theme.
+                    <span className="inline-flex items-center rounded-md bg-white px-2 py-1">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={product.supplier.logoUrl}
+                        alt={product.supplier.name}
+                        className="h-6 w-auto max-w-[140px] object-contain"
+                      />
+                    </span>
                   )}
                   <p className="text-sm text-white/60">by {product.supplier.name}</p>
                 </div>
