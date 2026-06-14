@@ -1,8 +1,8 @@
 import { ProductFilter } from '@/components/sections/product-filter';
-import { getCategories, getProducts } from '@/lib/site-data';
+import { getCategories, getAllProducts } from '@/lib/site-data';
 
 export default async function ProductsPage() {
-  const [products, categories] = await Promise.all([getProducts(), getCategories()]);
+  const [products, categories] = await Promise.all([getAllProducts(), getCategories()]);
 
   // Transform categories to include id for filtering
   const categoriesWithId = categories.map((cat) => ({

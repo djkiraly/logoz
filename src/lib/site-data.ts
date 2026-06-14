@@ -131,6 +131,9 @@ export const getSuppliers = cache(async () =>
   ),
 );
 
+// Capped feed for the homepage showcase / marketing snapshot — NOT the full
+// catalog. The /products page must use getAllProducts() so its client-side
+// category filter sees every visible product, not just the first 12.
 export const getProducts = cache(async () =>
   loadOrFallback(
     () =>
@@ -140,6 +143,25 @@ export const getProducts = cache(async () =>
         omit: { cost: true },
         include: { category: true, supplier: true },
         take: 12,
+        orderBy: [
+          { featured: 'desc' },
+          { createdAt: 'desc' },
+        ],
+      }),
+    fallback.products,
+  ),
+);
+
+// Full set of visible products for the /products catalog page. The page filters
+// by category client-side, so it needs the complete list (no take cap).
+export const getAllProducts = cache(async () =>
+  loadOrFallback(
+    () =>
+      prisma.product.findMany({
+        where: { visible: true },
+        // Never expose supplier cost on public pages.
+        omit: { cost: true },
+        include: { category: true, supplier: true },
         orderBy: [
           { featured: 'desc' },
           { createdAt: 'desc' },
