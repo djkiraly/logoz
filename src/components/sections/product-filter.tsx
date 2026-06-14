@@ -141,10 +141,10 @@ export function ProductFilter({ products, categories }: ProductFilterProps) {
                 href={`/products/${encodeURIComponent(product.sku)}`}
                 className="group flex flex-col rounded-3xl border border-white/10 bg-white/5 p-5 transition-colors hover:bg-white/10"
               >
-                <div className="aspect-[4/3] overflow-hidden rounded-2xl bg-black/30">
+                <div className="aspect-[3/4] overflow-hidden rounded-2xl bg-black/30">
                   {product.heroImageUrl ? (
                     <div
-                      className="h-full w-full bg-cover bg-center transition duration-500 group-hover:scale-105"
+                      className="h-full w-full bg-contain bg-center bg-no-repeat transition duration-500 group-hover:scale-105"
                       style={{ backgroundImage: `url(${product.heroImageUrl})` }}
                     />
                   ) : (

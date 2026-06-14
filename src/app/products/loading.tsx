@@ -23,7 +23,7 @@ export default function ProductsLoading() {
             className="space-y-3"
             style={{ animationDelay: `${i * 50}ms` }}
           >
-            <div className="aspect-square animate-pulse rounded-2xl bg-white/5" />
+            <div className="aspect-[3/4] animate-pulse rounded-2xl bg-white/5" />
             <div className="h-6 w-3/4 animate-pulse rounded bg-white/5" />
             <div className="h-4 w-1/2 animate-pulse rounded bg-white/5" />
             <div className="h-5 w-1/3 animate-pulse rounded bg-white/5" />

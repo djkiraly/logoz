@@ -79,7 +79,19 @@
       "Bash(echo \"---tsc exit $?---\")",
       "Bash(npx eslint *)",
       "Bash(echo \"---eslint exit $?---\")",
-      "Bash(git merge *)"
+      "Bash(git merge *)",
+      "Bash(git update-index *)",
+      "Bash(bash -n deploy/migrate-neon-to-local.sh)",
+      "Bash(npm run *)",
+      "Bash(node -e 'require\\(\"fs\"\\).renameSync\\(process.env.TEMP+\"\\\\\\\\sanmar-sample.txt\",\"./.sanmar-sample.txt\"\\)')",
+      "Bash(ls -la .sanmar-sample.txt)",
+      "Bash(echo \"EXIT $?\")",
+      "Bash(echo \"=== exit $? ===\")",
+      "Bash(sed -n '/model SiteSetting/,/^}/p' prisma/schema.prisma)",
+      "Bash(sed -n '/model QuoteLineItem/,/^}/p' prisma/schema.prisma)",
+      "Bash(git -C \"D:\\\\Projects\\\\Logoz\" log --oneline -8)",
+      "Bash(git -C \"D:\\\\Projects\\\\Logoz\" status -s)",
+      "Bash(git -C \"D:\\\\Projects\\\\Logoz\" branch --show-current)"
     ],
     "deny": [],
     "ask": []
